@@ -16,11 +16,13 @@ void toFile(string path, vector<std::pair<ofColor, int>>&dat) {
 	}
 	file.close();
 }
-void toFile(string path, vector<ofColor>&dat) {
+void toFile(string path, vector<ofColor>&dat, bool clear=false) {
 
 	ofFile file(path);
 	file.open(path, ofFile::WriteOnly);
-
+	if (clear) {
+		file.clear();
+	}
 	for (auto itr = dat.begin(); itr != dat.end(); ++itr) {
 		file << *itr << "\n";
 	}
@@ -234,25 +236,22 @@ void ofApp::setup() {
 
 	//ofTranslate(300, 0);
 	// less colors, do not draw on top of each other, find holes
+	ContourFinder finder;
+	finder.setMinAreaRadius(1);
+	finder.setMaxAreaRadius(150);
+	finder.setSimplify(true);
+	finder.setAutoThreshold(false);
+	finder.setThreshold(threshold);
+	finder.setUseTargetColor(true);
+	finder.setFindHoles(true);// matters
+	finder.setSortBySize(false);
+
 	while (index > -1 && index < count) {
 		//bugbug move this to a function that can be called at any time to reset things
 		//bugbug save getPolylines in a file so redraw is fast
-		ofColor color;
-		color = colors[index++].first;
-		ContourFinder finder;
-		finder.setMinAreaRadius(1);
-		finder.setMaxAreaRadius(150);
-		finder.setSimplify(true);
-		finder.setAutoThreshold(false);
-
-		finder.setUseTargetColor(true);
-		finder.setFindHoles(true);// matters
-		finder.setSortBySize(false);
+		ofColor color = colors[index++].first;
 		// put all results in a vector of PolyLines, then sort by size, then draw, save polylines in a file
-		// 'b' moves index back by 10
-		//color = ofColor::yellow;
 		finder.setTargetColor(color, TRACK_COLOR_RGB);
-		finder.setThreshold(threshold);
 		finder.findContours(img);
 		if (finder.getPolylines().size() > 1) {
 			std::pair<ofColor, vector<ofPolyline>> pair(color, finder.getPolylines());
@@ -309,20 +308,18 @@ void ofApp::draw() {
 	//sobel.draw(640, 480);
 	ofSetLineWidth(1);
 
-	if (1) {
-		once = true;
-		ofxCv::toOf(img, image);
-		image.draw(500, 0);
-	}
+	ofxCv::toOf(img, image);
+	image.draw(500, 0);// test with 2000,2000 image
 
 	ofPushStyle();
 	count = shapes.size();
 
-	//ofTranslate(300, 0);
+	//ofTranslate(300, 0); keep as a reminder
+
 	// less colors, do not draw on top of each other, find holes
 	while (index > -1 && index < count) {
 
-		ofSetColor(shapes[index].first);
+		ofSetColor(shapes[index].first); // varibles here include only show large, or smalll, to create different pictures
 		echo(shapes[index].second);
 		savedcolors.push_back(shapes[index].first);
 		++index;
@@ -343,13 +340,14 @@ void ofApp::keyPressed(int key) {
 
 			string filename = "data" + ofToString(savecount++);
 			filename += ".dat";
-			toFile(filename, savedcolors);
+			toFile(filename, savedcolors, true);
 			savedcolors.clear();
 		}
 	}
 	else if (key == 'b') {
-		index -= 10;
-		if (index < 0)
+		index -= 20; // hit b a bunch of times to get back to the start
+		if (index < 0) {
 			index = 0;
+		}
 	}
 }

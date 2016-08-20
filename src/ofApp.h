@@ -23,7 +23,6 @@ public:
 	
 	int savecount = 0;
 	cv::Mat img;
-	bool once = false;
 	void readColors(unordered_map<int, int> &colors);
 	int savex;
 	ofxPanel gui;
