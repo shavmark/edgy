@@ -9,9 +9,11 @@ using namespace ofxCv;
 using namespace cv;
 class colorData {
 public:
-	int operator==(colorData data) { return data.color == color; }
+	colorData() {}
+	colorData(const ofColor& data) { color = data;  } //bugbut not everything is copied
+	int operator==(const colorData& data) { return data.color == color; }
 	ofColor color;
-	int count;
+	float threshold = 0;
 	vector<ofPolyline> lines;
 };
 class ofApp : public ofBaseApp {
@@ -20,19 +22,19 @@ public:
 	bool find(ofColor&color, bool add);
 	bool test(ofColor&color, int i, int j, int k);
 	bool dedupe(ofColor&color, int rangeR, int rangeG, int rangeB);
+	void readColors();
+	void keyPressed(int key);
+
 	void setup();
 	void update();
 	void draw();
+
 	ofVideoGrabber cam;
 	ofImage gray, edge, sobel;
 	ofImage image;
-	void keyPressed(int key);
 	vector<colorData> shapes;
 	
-	int savecount = 0;
 	cv::Mat img;
-	void readColors();
-	int savex;
 	ofxPanel gui;
 	ofParameterGroup group;
 	ofParameter<string> imagePath;
@@ -40,9 +42,13 @@ public:
 	ofParameter<int> count;
 	ofParameter<int> index;
 	ofParameter<ofColor>targetColor;
-	unordered_set<string> hitPixels;
 	ofParameter<bool> generatecolors;
 	vector<ofColor> savedcolors; //bugbug make unique, right now will store dupes
 	ofColor warm;
+
+private:
+	map<int, int> colorhash; //optimization
+	int savecount = 0;
+	int savex;
 };
 

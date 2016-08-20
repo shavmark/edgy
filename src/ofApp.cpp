@@ -45,22 +45,19 @@ bool isCool(ofColor&color) {
 	return (h > 80 && h < 330);
 }
 bool ofApp::find(ofColor&color, bool add) {
-	colorData item;
-	item.color = color;
-	vector<colorData>::iterator itr = std::find(shapes.begin(), shapes.end(), item);
-	if (itr != shapes.end()) {
-		itr->count += 1;
-		if (!add) {
-			int i = 0; // for debug
-		}
+
+	map<int, int>::iterator itr = colorhash.find(color.getHex());
+	if (itr != colorhash.end()) {
+		++itr->second;
 		return true;
 	}
 	else {
 		if (add) {
 			colorData data;
 			data.color = color;
-			data.count = 1;
 			shapes.push_back(data);
+			
+			colorhash.insert(make_pair(color.getHex(), 1));
 			return true;
 		}
 		return false;
@@ -118,10 +115,9 @@ bool ofApp::dedupe(ofColor&color, int rangeR, int rangeG, int rangeB) {
 	}
 
 	if (!found) {
-		colorData item;
-		item.color = color;
-		vector<colorData>::iterator itr = std::find(shapes.begin(), shapes.end(), item);
-		if (itr == shapes.end()) {
+		map<int, int>::iterator itr = colorhash.find(color.getHex());
+
+		if (itr == colorhash.end()) {
 			// color is not in the list
 			return find(color, true);
 		}
@@ -135,18 +131,13 @@ void ofApp::readColors() {
 	if (file.exists()) {
 		// use it
 		while (file) {
-			ofColor color;
-			file >> color;
-			if (!isCool(color) && color.getBrightness() > 200) {
-				warm = color;// go with most recent
-			}
+			colorData data;
+			file >> data.color;
+			shapes.push_back(data);
+			colorhash.insert(make_pair(data.color.getHex(), 1));
 
-			if (color.getBrightness() > 255) {
-				color.setBrightness(230);
-				dedupe(color, 5, 5, 5);
-			}
-			else {
-				dedupe(color, 5, 5, 5);
+			if (!isCool(data.color) && data.color.getBrightness() > 200) {
+				warm = data.color;// go with most recent
 			}
 		}
 	}
@@ -250,25 +241,24 @@ void ofApp::setup() {
 	finder.setUseTargetColor(true);
 	finder.setFindHoles(true);// matters
 	finder.setSortBySize(false);
-
-	while (index > -1 && index < count) {
+	for (int i = 0; i < count; ++i){
 		//bugbug move this to a function that can be called at any time to reset things
 		//bugbug save getPolylines in a file so redraw is fast
-		ofColor color = shapes[index].color;
+		ofColor color = shapes[i].color;
 		// put all results in a vector of PolyLines, then sort by size, then draw, save polylines in a file
 		finder.setTargetColor(color, TRACK_COLOR_RGB);
 		finder.findContours(img);
 		if (finder.getPolylines().size() > 1) {
-			colorData data;
-			data.color = color;
-			data.count = 0;//bugbug get real count, set this data at read time
-			data.lines = finder.getPolylines();
-			shapes.push_back(data);
-			break;
+			colorData data(color);
+			vector<colorData>::iterator itr = std::find(shapes.begin(), shapes.end(), data);
+			if (itr != shapes.end()) {
+				itr->lines = finder.getPolylines();
+				itr->threshold = threshold;
+			}
 		}
 	}
 	sort(shapes.begin(), shapes.end(), [=](colorData a, colorData b)	{
-		return a.lines.size() > b.lines.size();//bugbug need to add in sort by saturation, brightness etc
+		return a.color.getSaturation() > a.color.getSaturation();//bugbug need to add in sort by saturation, brightness, object size etc
 	});
 	ofSetBackgroundAuto(false);
 }// 45shavlik11
@@ -319,21 +309,18 @@ void ofApp::draw() {
 	ofxCv::toOf(img, image);
 	image.draw(500, 0);// test with 2000,2000 image
 
-	ofPushStyle();
-	count = shapes.size();
-
 	//ofTranslate(300, 0); keep as a reminder
-
-	// less colors, do not draw on top of each other, find holes
-	while (index > -1 && index < count) {
-
+	if (index >= 0) {
+		ofPushStyle();
+		// less colors, do not draw on top of each other, find holes
 		ofSetColor(shapes[index].color); // varibles here include only show large, or smalll, to create different pictures
 		savedcolors.push_back(shapes[index].color);
 		echo(shapes[index].lines);
-		++index;
+		if (++index >= count) {
+			index = -1; // stop
+		}
+		ofPopStyle();
 	}
-
-	ofPopStyle();
 	return;
 
 }
@@ -351,6 +338,9 @@ void ofApp::keyPressed(int key) {
 			toFile(filename, savedcolors, true);
 			savedcolors.clear();
 		}
+	}
+	else if (key == 'g') {
+		index = 0; // go from start
 	}
 	else if (key == 'b') {
 		index -= 20; // hit b a bunch of times to get back to the start
