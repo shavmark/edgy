@@ -8,34 +8,24 @@
 using namespace ofxCv;
 using namespace cv;
 
-class Drawing {
-public:
-	ContourFinder contourFinder;
-	ofColor color;
-
-
-};
 class ofApp : public ofBaseApp {
 public:
-	void echo(ContourFinder& finder, bool cleanPixelsOnly = false);
+	void echo(vector<ofPolyline>&lines);
 	void setup();
 	void update();
 	void draw();
 	ofVideoGrabber cam;
 	ofImage gray, edge, sobel;
 	ofImage image;
-	vector<Drawing> drawings;
 	void keyPressed(int key);
-	std::vector<std::pair<ofColor, int>> pairsDark;
-	std::vector<std::pair<ofColor, int>> pairsLight;
-	std::vector<std::pair<ofColor, int>> *pairsCurrent = nullptr;
-	vector<ofPolyline> polys;
+	vector<pair<ofColor, int>> colors;
+	vector<pair<ofColor, vector<ofPolyline>>> shapes;
+	
 	int savecount = 0;
 	cv::Mat img;
 	bool once = false;
-	void readColors(unordered_map<int, int> &findDarkcolors, unordered_map<int, int>& findBrightcolors);
+	void readColors(unordered_map<int, int> &colors);
 	int savex;
-	vector<cv::Rect> bounding;
 	ofxPanel gui;
 	ofParameterGroup group;
 	ofParameter<string> imagePath;

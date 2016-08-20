@@ -2,7 +2,6 @@
 #include <time.h>
 void toFile(string path, vector<std::pair<ofColor, int>>&dat) {
 
-
 	ofFile file(path);
 	file.open(path, ofFile::WriteOnly);
 	time_t rawtime;
@@ -18,7 +17,6 @@ void toFile(string path, vector<std::pair<ofColor, int>>&dat) {
 	file.close();
 }
 void toFile(string path, vector<ofColor>&dat) {
-
 
 	ofFile file(path);
 	file.open(path, ofFile::WriteOnly);
@@ -121,7 +119,7 @@ bool dedupe(unordered_map<int, int>&colors, ofColor&color, int rangeR, int range
 	return false;
 }
 
-void ofApp::readColors(unordered_map<int, int> &findDarkcolors, unordered_map<int, int>& findBrightcolors) {
+void ofApp::readColors(unordered_map<int, int> &colors) {
 	string filename = "pic3.dat";
 	ofFile file(filename);
 	if (file.exists()) {
@@ -135,10 +133,10 @@ void ofApp::readColors(unordered_map<int, int> &findDarkcolors, unordered_map<in
 
 			if (color.getBrightness() > 255) {
 				color.setBrightness(230);
-				dedupe(findDarkcolors, color, 5, 5, 5);
+				dedupe(colors, color, 5, 5, 5);
 			}
 			else {
-				dedupe(findDarkcolors, color, 5, 5, 5);
+				dedupe(colors, color, 5, 5, 5);
 			}
 		}
 	}
@@ -160,10 +158,10 @@ void ofApp::readColors(unordered_map<int, int> &findDarkcolors, unordered_map<in
 				}
 				if (color.getBrightness() > 255) { // ignore the super bright stuff
 					color.setBrightness(255); // see what else can be done here
-					found = dedupe(findDarkcolors, color, 5, 5, 5);
+					found = dedupe(colors, color, 5, 5, 5);
 				}
 				else {
-					found = dedupe(findDarkcolors, color, 5, 5, 5);
+					found = dedupe(colors, color, 5, 5, 5);
 				}
 				if (found) {
 					dat.push_back(color);
@@ -195,40 +193,21 @@ void ofApp::setup() {
 	ofxCv::toOf(img, image);
 	image.setImageType(OF_IMAGE_COLOR); // should not need this? TODO any over-head / conversion?
 
-	unordered_map<int, int> findDarkcolors;
-	unordered_map<int, int> findBrightcolors;//bugbug warm/cool?
-	readColors(findDarkcolors, findBrightcolors);
+	unordered_map<int, int> findcolors;//bugbug warm/cool?
+	readColors(findcolors);
 
-	for (auto itr = findDarkcolors.begin(); itr != findDarkcolors.end(); ++itr) {
+	for (auto itr = findcolors.begin(); itr != findcolors.end(); ++itr) {
 		ofColor c = ofColor::fromHex(itr->first);
 		std::pair<ofColor, int> pair(c, itr->second);
 
-		pairsDark.push_back(pair);
+		colors.push_back(pair);
 
 	}
-	// drop light and dark, use "if light then set lightthresh hold" cleans it all up
-	vector< pair<ofColor, int> >::iterator it = pairsLight.begin();
-	for (auto itr = findBrightcolors.begin(); itr != findBrightcolors.end(); ++itr) {
-		ofColor c = ofColor::fromHex(itr->first);
-		std::pair<ofColor, int> pair(c, itr->second);
-
-		pairsLight.push_back(pair);
-
-	}
-#ifdef DEBUG1
-	it = pairsDark.begin();
-	while (it != pairsDark.end() - 1) {
-		if (it->second < 5) {
-			it = pairsDark.erase(it); // color needs to appear at least 10 times before we use it
-		}
-		else ++it;
-	}
-
-#endif // DEBUG1
+	
+	// bugbug drop light and dark, use "if light then set lightthresh hold" cleans it all up
 
 
-	sort(pairsDark.begin(), pairsDark.end(), [=](std::pair<ofColor, int>& a, std::pair<ofColor, int>& b)
-	{
+	sort(colors.begin(), colors.end(), [=](std::pair<ofColor, int>& a, std::pair<ofColor, int>& b)	{
 		// push less saturated back, then darks
 		if (a.first.getSaturation() == b.first.getSaturation()) {
 			if (a.first.getBrightness() == b.first.getBrightness()) {
@@ -251,18 +230,39 @@ void ofApp::setup() {
 
 	}
 	);
-	sort(pairsLight.begin(), pairsLight.end(), [=](std::pair<ofColor, int>& a, std::pair<ofColor, int>& b)
-	{
-		if (a.first.getSaturation() == b.first.getSaturation()) {
-			return a.first.getBrightness() > b.first.getBrightness();
-		}
-		return a.first.getBrightness() > b.first.getBrightness();
-	}
-	);
+	count = colors.size();
 
-	//for debug more data toFile("lotsofdata2.dat", pairsLight);
-	pairsCurrent = &pairsDark;
-	ofSetBackgroundColor(ofColor::white);
+	//ofTranslate(300, 0);
+	// less colors, do not draw on top of each other, find holes
+	while (index > -1 && index < count) {
+		//bugbug move this to a function that can be called at any time to reset things
+		//bugbug save getPolylines in a file so redraw is fast
+		ofColor color;
+		color = colors[index++].first;
+		ContourFinder finder;
+		finder.setMinAreaRadius(1);
+		finder.setMaxAreaRadius(150);
+		finder.setSimplify(true);
+		finder.setAutoThreshold(false);
+
+		finder.setUseTargetColor(true);
+		finder.setFindHoles(true);// matters
+		finder.setSortBySize(false);
+		// put all results in a vector of PolyLines, then sort by size, then draw, save polylines in a file
+		// 'b' moves index back by 10
+		//color = ofColor::yellow;
+		finder.setTargetColor(color, TRACK_COLOR_RGB);
+		finder.setThreshold(threshold);
+		finder.findContours(img);
+		if (finder.getPolylines().size() > 1) {
+			std::pair<ofColor, vector<ofPolyline>> pair(color, finder.getPolylines());
+			shapes.push_back(pair);
+			break;
+		}
+	}
+	sort(shapes.begin(), shapes.end(), [=](std::pair<ofColor, vector<ofPolyline>> a, std::pair<ofColor, vector<ofPolyline>> b)	{
+		return a.second.size() > b.second.size();
+	});
 	ofSetBackgroundAuto(false);
 }// 45shavlik11
  //http://www.creativeapplications.net/tutorials/arduino-servo-opencv-tutorial-openframeworks/
@@ -283,42 +283,15 @@ void ofApp::update() {
 
 
 }
-void ofApp::echo(ContourFinder& finder, bool cleanPixelsOnly) {
+void ofApp::echo(vector<ofPolyline>&lines) {
 
-	for (int j = 0; j < finder.getPolylines().size(); j++) {
-		// save the pixels we will set
-		if (cleanPixelsOnly) {
-			ofPolyline line = finder.getPolylines()[j].getSmoothed(2);
-			for (int z = 0; z < line.size(); ++z) {
-				std::ostringstream ss;
-				ss << (int)line[z].x << ":" << (int)line[z].y;
-				std::string s(ss.str());
-				unordered_set<string>::iterator points = hitPixels.find(s);
-				if (points == hitPixels.end()) {
-					hitPixels.insert(s);
-					ofDrawCircle(line[z].x, line[z].y, 1);
-				}
-			}
-		}
-		else {
-			ofPolyline line = finder.getPolylines()[j].getSmoothed(2);
-			for (int z = 0; z < line.size(); ++z) {
-				std::ostringstream ss;
-				ss << (int)line[z].x << ":" << (int)line[z].y;
-				std::string s(ss.str());
-				unordered_set<string>::iterator points = hitPixels.find(s);
-				if (points == hitPixels.end()) {
-					hitPixels.insert(s);
-				}
-			}
-			ofTessellator tess;
-			ofMesh mesh;
-			tess.tessellateToMesh(finder.getPolylines()[j].getSmoothed(2), OF_POLY_WINDING_ODD, mesh, true);
-			mesh.draw();
-			finder.getPolylines()[j].getSmoothed(2).draw();
-
-		}
-
+	for (int j = 0; j <lines.size(); j++) {
+		ofPolyline line = lines[j].getSmoothed(2); //bugbug test this data
+		ofTessellator tess;
+		ofMesh mesh;
+		tess.tessellateToMesh(line, OF_POLY_WINDING_ODD, mesh, true);
+		mesh.draw();
+		line.draw();
 	}
 }
 void ofApp::draw() {
@@ -328,7 +301,6 @@ void ofApp::draw() {
 	ofSetColor(ofColor::white);
 	ofSetBackgroundColor(warm);//bugbug use lightest found color
 	gui.draw();
-
 
 	//ofFill();
 	//cam.draw(0, 0);
@@ -344,58 +316,16 @@ void ofApp::draw() {
 	}
 
 	ofPushStyle();
-	count = pairsCurrent->size();
-	if (index >= pairsCurrent->size() && index != -1) {
-		index = 0;
-
-		if (pairsCurrent == &pairsDark) {
-			pairsCurrent = &pairsLight;// flip to dark if currently light
-		}
-		else {
-			pairsCurrent = &pairsDark;//bugbug flip to dark if currently light
-		}
-	}
-	if (pairsCurrent == &pairsDark) {
-		threshold = 10;
-	}
-	else {
-		threshold = 180;
-	}
-
+	count = shapes.size();
 
 	//ofTranslate(300, 0);
 	// less colors, do not draw on top of each other, find holes
-	while (pairsCurrent && index > -1 && index < pairsCurrent->size()) {
+	while (index > -1 && index < count) {
 
-		ofColor color;
-		color = (*pairsCurrent)[index++].first;
-		ContourFinder finder;
-		finder.setMinAreaRadius(1);
-		finder.setMaxAreaRadius(150);
-		finder.setSimplify(true);
-		finder.setAutoThreshold(false);
-
-		finder.setUseTargetColor(true);
-		finder.setFindHoles(true);// matters
-		finder.setSortBySize(false);
-		// put all results in a vector of PolyLines, then sort by size, then draw
-		// 'b' moves index back by 10
-		//color = ofColor::yellow;
-		finder.setTargetColor(color, TRACK_COLOR_RGB);
-		finder.setThreshold(threshold);
-		finder.findContours(img);
-		if (finder.getPolylines().size() > 1) {
-			ofSetColor(color);
-			echo(finder, pairsCurrent != &pairsDark);
-			targetColor = color;
-			savedcolors.push_back(color);
-			break;
-		}
-		else {
-			int i = 0;
-			targetColor = ofColor::black;
-		}
-
+		ofSetColor(shapes[index].first);
+		echo(shapes[index].second);
+		savedcolors.push_back(shapes[index].first);
+		++index;
 	}
 
 	ofPopStyle();
@@ -416,6 +346,10 @@ void ofApp::keyPressed(int key) {
 			toFile(filename, savedcolors);
 			savedcolors.clear();
 		}
-
+	}
+	else if (key == 'b') {
+		index -= 10;
+		if (index < 0)
+			index = 0;
 	}
 }
