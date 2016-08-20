@@ -1,5 +1,7 @@
 #include "ofApp.h"
 #include <time.h>
+#include <algorithm>
+
 void toFile(string path, vector<std::pair<ofColor, int>>&dat) {
 
 	ofFile file(path);
@@ -42,68 +44,72 @@ bool isCool(ofColor&color) {
 	float h = color.getHue();
 	return (h > 80 && h < 330);
 }
-bool find(unordered_map<int, int> &finder, ofColor&color, bool add) {
-	std::unordered_map<int, int>::iterator got = finder.find(color.getHex());
-	if (got == finder.end()) {
+bool ofApp::find(ofColor&color, bool add) {
+	colorData item;
+	item.color = color;
+	vector<colorData>::iterator itr = std::find(shapes.begin(), shapes.end(), item);
+	if (itr != shapes.end()) {
+		itr->count += 1;
+		if (!add) {
+			int i = 0; // for debug
+		}
+		return true;
+	}
+	else {
 		if (add) {
-			std::pair<int, int> add(color.getHex(), 0);
-			finder.insert(add);
+			colorData data;
+			data.color = color;
+			data.count = 1;
+			shapes.push_back(data);
 			return true;
 		}
 		return false;
 	}
-	else {
-		got->second += 1;
-		if (!add) {
-			int i = 0;
-		}
-		return true;
-	}
 }
-bool test(unordered_map<int, int>&colors, ofColor&color, int i, int j, int k) {
+bool ofApp::test(ofColor&color, int i, int j, int k) {
 	ofColor testColor = color;
 	testColor.r += i;
 	testColor.g += j;
 	testColor.b += k;
-	return find(colors, testColor, false);
+	return find(testColor, false);
 }
 // return true if color added
-bool dedupe(unordered_map<int, int>&colors, ofColor&color, int rangeR, int rangeG, int rangeB) {
+bool ofApp::dedupe(ofColor&color, int rangeR, int rangeG, int rangeB) {
 
 	bool found = false;
 
 	for (int i = 0; i < rangeR && !found; ++i) {
 		for (int j = 0; j < rangeG && !found; ++j) {
 			for (int k = 0; k < rangeB && !found; ++k) {
-				if (test(colors, color, i, j, k)) {
+				if (test(color, i, j, k)) {
 					found = true;
 					break;
 				}
-				if (test(colors, color, i, j, -k)) {
+				if (test(color, i, j, -k)) {
 					found = true;
 					break;
 				}
-				if (test(colors, color, i, -j, k)) {
+				if (test(color, i, -j, k)) {
 					found = true;
 					break;
 				}
-				if (test(colors, color, i, -j, -k)) {
+				if (test(color, i, -j, -k)) {
 					found = true;
 					break;
 				}
-				if (test(colors, color, -i, j, k)) {
+				if (test(color, -i, j, k)) {
 					found = true;
 					break;
 				}
-				if (test(colors, color, -i, j, -k)) {
+				if (test(color, -i, j, -k)) {
 					found = true;
 					break;
 				}
-				if (test(colors, color, -i, -j, k)) {
+				if (test(color, -i, -j, k)) {
 					found = true;
 					break;
 				}
-				if (test(colors, color, -i, -j, -k)) {
+				if (test(color, -i, -j, -k)) {
 					found = true;
 					break;
 				}
@@ -112,16 +118,18 @@ bool dedupe(unordered_map<int, int>&colors, ofColor&color, int rangeR, int range
 	}
 
 	if (!found) {
-		std::unordered_map<int, int>::iterator got = colors.find(color.getHex());
-		if (got == colors.end()) {
+		colorData item;
+		item.color = color;
+		vector<colorData>::iterator itr = std::find(shapes.begin(), shapes.end(), item);
+		if (itr == shapes.end()) {
 			// color is not in the list
-			return find(colors, color, true);
+			return find(color, true);
 		}
 	}
 	return false;
 }
 
-void ofApp::readColors(unordered_map<int, int> &colors) {
+void ofApp::readColors() {
 	string filename = "pic3.dat";
 	ofFile file(filename);
 	if (file.exists()) {
@@ -135,10 +143,10 @@ void ofApp::readColors(unordered_map<int, int> &colors) {
 
 			if (color.getBrightness() > 255) {
 				color.setBrightness(230);
-				dedupe(colors, color, 5, 5, 5);
+				dedupe(color, 5, 5, 5);
 			}
 			else {
-				dedupe(colors, color, 5, 5, 5);
+				dedupe(color, 5, 5, 5);
 			}
 		}
 	}
@@ -160,10 +168,10 @@ void ofApp::readColors(unordered_map<int, int> &colors) {
 				}
 				if (color.getBrightness() > 255) { // ignore the super bright stuff
 					color.setBrightness(255); // see what else can be done here
-					found = dedupe(colors, color, 5, 5, 5);
+					found = dedupe(color, 5, 5, 5);
 				}
 				else {
-					found = dedupe(colors, color, 5, 5, 5);
+					found = dedupe(color, 5, 5, 5);
 				}
 				if (found) {
 					dat.push_back(color);
@@ -195,21 +203,16 @@ void ofApp::setup() {
 	ofxCv::toOf(img, image);
 	image.setImageType(OF_IMAGE_COLOR); // should not need this? TODO any over-head / conversion?
 
-	unordered_map<int, int> findcolors;//bugbug warm/cool?
-	readColors(findcolors);
+	// bugbug support warm, cools?
 
-	for (auto itr = findcolors.begin(); itr != findcolors.end(); ++itr) {
-		ofColor c = ofColor::fromHex(itr->first);
-		std::pair<ofColor, int> pair(c, itr->second);
+	readColors();
 
-		colors.push_back(pair);
-
-	}
-	
 	// bugbug drop light and dark, use "if light then set lightthresh hold" cleans it all up
 
 
-	sort(colors.begin(), colors.end(), [=](std::pair<ofColor, int>& a, std::pair<ofColor, int>& b)	{
+#ifdef DEBUG2
+	// sort results, this enables more flexibilty at run time
+	sort(colors.begin(), colors.end(), [=](std::pair<ofColor, int>& a, std::pair<ofColor, int>& b) {
 		// push less saturated back, then darks
 		if (a.first.getSaturation() == b.first.getSaturation()) {
 			if (a.first.getBrightness() == b.first.getBrightness()) {
@@ -232,7 +235,9 @@ void ofApp::setup() {
 
 	}
 	);
-	count = colors.size();
+#endif // DEBUG2
+
+	count = shapes.size();
 
 	//ofTranslate(300, 0);
 	// less colors, do not draw on top of each other, find holes
@@ -249,18 +254,21 @@ void ofApp::setup() {
 	while (index > -1 && index < count) {
 		//bugbug move this to a function that can be called at any time to reset things
 		//bugbug save getPolylines in a file so redraw is fast
-		ofColor color = colors[index++].first;
+		ofColor color = shapes[index].color;
 		// put all results in a vector of PolyLines, then sort by size, then draw, save polylines in a file
 		finder.setTargetColor(color, TRACK_COLOR_RGB);
 		finder.findContours(img);
 		if (finder.getPolylines().size() > 1) {
-			std::pair<ofColor, vector<ofPolyline>> pair(color, finder.getPolylines());
-			shapes.push_back(pair);
+			colorData data;
+			data.color = color;
+			data.count = 0;//bugbug get real count, set this data at read time
+			data.lines = finder.getPolylines();
+			shapes.push_back(data);
 			break;
 		}
 	}
-	sort(shapes.begin(), shapes.end(), [=](std::pair<ofColor, vector<ofPolyline>> a, std::pair<ofColor, vector<ofPolyline>> b)	{
-		return a.second.size() > b.second.size();
+	sort(shapes.begin(), shapes.end(), [=](colorData a, colorData b)	{
+		return a.lines.size() > b.lines.size();//bugbug need to add in sort by saturation, brightness etc
 	});
 	ofSetBackgroundAuto(false);
 }// 45shavlik11
@@ -319,9 +327,9 @@ void ofApp::draw() {
 	// less colors, do not draw on top of each other, find holes
 	while (index > -1 && index < count) {
 
-		ofSetColor(shapes[index].first); // varibles here include only show large, or smalll, to create different pictures
-		echo(shapes[index].second);
-		savedcolors.push_back(shapes[index].first);
+		ofSetColor(shapes[index].color); // varibles here include only show large, or smalll, to create different pictures
+		savedcolors.push_back(shapes[index].color);
+		echo(shapes[index].lines);
 		++index;
 	}
 
