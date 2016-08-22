@@ -128,11 +128,11 @@ bool Image::dedupe(ofColor color, int rangeR, int rangeG, int rangeB) {
 }
 
 void Image::readColors() {
-	ofFile resultsfile(name + string(".data.dat"), ofFile::WriteOnly);
+	ofFile resultsfile(name + string(".data.dat"));
 
 	shapes.clear();
 
-	if (resultsfile.exists() && resultsfile.getSize() > 0) {
+	if (resultsfile.exists()) {
 		// use it
 		while (resultsfile) {
 			colorData data;
@@ -146,6 +146,7 @@ void Image::readColors() {
 	}
 	else {
 		// create it	
+		resultsfile.open(name + string(".data.dat"), ofFile::WriteOnly);
 		vector<ofColor> dat;
 		for (int w = 0; w < mat.rows; w += 1) {
 			for (int h = 0; h < mat.cols; h += 1) {
@@ -196,7 +197,7 @@ void LiveArt::setMenu(ofxPanel &gui) {
 	settings.add(threshold.set("Threshold", 5, 0.0, 255.0));
 
 	settings.add(minRadius.set("minRadius", 1, 0.0, 255.0));
-	settings.add(maxRadius.set("maxRadius", 1, 0.0, 255.0));
+	settings.add(maxRadius.set("maxRadius", 150, 0.0, 255.0));
 	settings.add(findHoles.set("findHoles", true));
 	settings.add(smoothingSize.set("smoothingSize", 2, 0.0, 255.0));
 	settings.add(smoothingShape.set("smoothingShape", 0.0, 0.0, 255.0));
@@ -218,6 +219,7 @@ bool LiveArt::loadAndFilter(Image& image) {
 	image.img.resize(xImage, yImage);
 	cv::Mat tempMat = toCv(image.img);
 	cv::bilateralFilter(tempMat, image.mat, d, sigmaColor, sigmaSpace);
+	toOf(image.mat, image.img);
 	return true;
 }
 int LiveArt::getImages() {
@@ -261,7 +263,7 @@ void LiveArt::setup() {
 			// bugbug install backup software
 			// put all results in a vector of PolyLines, then sort by size, then draw, save polylines in a file
 			finder.setTargetColor(itr2->second.color, TRACK_COLOR_RGB);
-			finder.findContours(itr->mat);
+			finder.findContours(itr->img);
 			if (finder.getPolylines().size() > 1) {
 				itr2->second.lines = finder.getPolylines();
 				itr2->second.threshold = threshold;
@@ -294,19 +296,24 @@ void LiveArt::draw() {
 	ofSetLineWidth(1);
 
 	images[currentImage].img.draw(xImage, 0);// test with 2000,2000 image
-						  //ofTranslate(300, 0); keep as a reminder
-	if (index >= 0) {
-		ofPushStyle();
-		// less colors, do not draw on top of each other, find holes
-		if (images[currentImage].drawingData.size() > 0) {
+	
+	//ofTranslate(300, 0); keep as a reminder
+
+	int s = images[currentImage].drawingData.size();
+
+	if (index > -1 && images[currentImage].drawingData.size() > 0) {
+		if (index < images[currentImage].drawingData.size()) {
+			ofPushStyle();
+			// less colors, do not draw on top of each other, find holes
 			ofSetColor(images[currentImage].drawingData[index].color); // varibles here include only show large, or smalll, to create different pictures
 			savedcolors.push_back(images[currentImage].drawingData[index].color);
 			echo(images[currentImage].drawingData[index].lines);
+			ofPopStyle();
 		}
-		if (++index >= count) {
+		++index;
+		if (index >= images[currentImage].drawingData.size()) {
 			index = -1; // stop
 		}
-		ofPopStyle();
 	}
 
 
