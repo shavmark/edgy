@@ -180,7 +180,7 @@ void ofApp::setup() {
 
 	ofSetFrameRate(120);
 
-	bool b = image.load("photo2.jpg");//bugbug menu ize
+	bool b = image.load(imagePath);//bugbug menu ize
 
 	image.resize(xImage, yImage);
 	warm = ofColor::lightYellow; // default

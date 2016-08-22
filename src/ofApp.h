@@ -36,7 +36,6 @@ public:
 	cv::Mat img;
 	ofxPanel gui;
 	ofParameterGroup group;
-	ofParameter<string> imagePath;
 	ofParameter<float> threshold;
 	ofParameter<int> count;
 	ofParameter<int> index;
@@ -56,6 +55,7 @@ public:
 	int d = 15; //bugbug learn for bilateralfilter
 	double sigmaColor = 80; //bugbug learn for bilateralfilter
 	double sigmaSpace = 80; //bugbug learn for bilateralfilter
+	string imagePath= "photo2.jpg";
 
 private:
 	vector<ofColor> savedcolors; //bugbug make unique, right now will store dupes
