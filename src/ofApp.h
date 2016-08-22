@@ -19,24 +19,26 @@ public:
 		vector<ofPolyline> lines;
 	};
 	typedef map<int, colorData> Shapes;
-	class Image : public ofImage {
+	class Image {
 	public:
 		Image(const string nme) { name = nme; }
 		string name;
-		Shapes shapes; 
+		Shapes shapes;
 		vector<colorData> drawingData;
+		cv::Mat mat;
 	};
 
 	void setup();
 	void update();
 	void draw();
 
+	bool LiveArt::loadAndFilter(Image& image);
 	void setMenu(ofxPanel &gui);
 	void echo(vector<ofPolyline>&lines);
 	bool find(Shapes&shapes, ofColor&color, bool add);
 	bool test(Shapes&shapes, ofColor&color, int i, int j, int k);
 	bool dedupe(Shapes&shapes, ofColor&color, int rangeR, int rangeG, int rangeB);
-	void readColors(Shapes&shapes, const ofImage& image, ofFile& resultsfile);
+	void readColors(Image& image, ofFile& resultsfile);
 	
 	void toFile(ofFile& resultsfile, vector<std::pair<ofColor, int>>&dat);
 	void toFile(ofFile& resultsfile, vector<ofColor>&dat, bool clear);
@@ -50,8 +52,8 @@ public:
 	ofParameter<bool> findHoles = true;
 	ofParameter<int> smoothingSize = 2;//learn
 	ofParameter<float> smoothingShape = 0.0;//bugbug learn
-	ofParameter<float> xImage = 500;// make bigger when presenting, smaller when getting colors
-	ofParameter<float> yImage = 500;
+	ofParameter<int> xImage = 500;// make bigger when presenting, smaller when getting colors
+	ofParameter<int> yImage = 500;
 	ofParameter<int> d = 15; //bugbug learn for bilateralfilter
 	ofParameter<double> sigmaColor = 80; //bugbug learn for bilateralfilter
 	ofParameter<double> sigmaSpace = 80; //bugbug learn for bilateralfilter
@@ -63,7 +65,6 @@ public:
 	ofParameter<ofColor>warm;
 	ofParameter<int> currentImage = 0;
 	vector<Image> images;
-	cv::Mat img;
 	
 	void snapshot();
 	void restore(){ index = savex; }

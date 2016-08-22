@@ -127,14 +127,14 @@ bool LiveArt::dedupe(Shapes&shapes, ofColor&color, int rangeR, int rangeG, int r
 	return false;
 }
 
-void LiveArt::readColors(Shapes&shapes, const ofImage& image, ofFile& resultsfile) {
+void LiveArt::readColors(Image& image, ofFile& resultsfile) {
 
 	if (resultsfile.exists()) {
 		// use it
 		while (resultsfile) {
 			colorData data;
 			resultsfile >> data.color;
-			shapes.insert(make_pair(data.color.getHex(), data));
+			image.shapes.insert(make_pair(data.color.getHex(), data));
 
 			if (!isCool(data.color) && data.color.getBrightness() > 200) {
 				warm = data.color;// go with most recent
@@ -144,9 +144,14 @@ void LiveArt::readColors(Shapes&shapes, const ofImage& image, ofFile& resultsfil
 	else {
 		// create it	
 		vector<ofColor> dat;
-		for (int w = 0; w < image.getWidth(); w += 1) {
-			for (int h = 0; h < image.getHeight(); h += 1) {
-				ofColor color = image.getPixels().getColor(w, h);
+		for (int w = 0; w < image.mat.rows; w += 1) {
+			for (int h = 0; h < image.mat.cols; h += 1) {
+				Vec3b bgrPixel = image.mat.at<Vec3b>(w, h);
+				//BGR not RGB
+				ofColor color;
+				color.b= bgrPixel[0];
+				color.g = bgrPixel[1];
+				color.r = bgrPixel[2];
 				// bugbug ? save all colors so its easier to tweak data later? maybe a different file?
 
 				bool found;
@@ -158,10 +163,10 @@ void LiveArt::readColors(Shapes&shapes, const ofImage& image, ofFile& resultsfil
 				}
 				if (color.getBrightness() > 255) { // ignore the super bright stuff
 					color.setBrightness(255); // see what else can be done here
-					found = dedupe(shapes, color, 5, 5, 5);
+					found = dedupe(image.shapes, color, 5, 5, 5);
 				}
 				else {
-					found = dedupe(shapes, color, 5, 5, 5);
+					found = dedupe(image.shapes, color, 5, 5, 5);
 				}
 				if (found) {
 					dat.push_back(color);
@@ -196,12 +201,23 @@ void LiveArt::setMenu(ofxPanel &gui) {
 	settings.add(smoothingSize.set("smoothingSize", 2, 0.0, 255.0));
 	settings.add(smoothingShape.set("smoothingShape", 0.0, 0.0, 255.0));
 	settings.add(xImage.set("xImage", 500,20, 4000.0));
-	settings.add(yImage.set("yImage", 500, 20, 4000.0));
+	settings.add(yImage.set("yImage", 500,20, 4000.0));
 	settings.add(d.set("d", 15, 0.0, 255.0));
 	settings.add(sigmaColor.set("sigmaColor", 80, 0.0, 255.0));
 	settings.add(sigmaSpace.set("sigmaSpace", 80, 0.0, 255.0));
 	settings.add(currentImageName.set("currentImageName"));
 
+}
+bool LiveArt::loadAndFilter(Image& image) {
+	cv::Mat tempMat;
+	loadMat(tempMat, image.name);
+	if (!tempMat.data) {
+		ofLogError() << image.name << " not loaded";
+		return false;
+	}
+	tempMat.create(xImage, yImage, tempMat.type());
+	cv::bilateralFilter(tempMat, image.mat, d, sigmaColor, sigmaSpace);
+	return true;
 }
 int LiveArt::getImages() {
 	ofDirectory dir("images");
@@ -209,11 +225,10 @@ int LiveArt::getImages() {
 	images.clear();
 	for (auto& itr = dir.begin(); itr != dir.end(); ++itr) {
 		Image image(itr->getFileName());
-		image.load(image.name);
-		image.resize(xImage, yImage);
-		cv::Mat img2 = toCv(image);
-		cv::bilateralFilter(img2, img, d, sigmaColor, sigmaSpace);
-		ofxCv::toOf(img, image);
+		if (!loadAndFilter(image)) {
+			ofLogError() << itr->getFileName() << " not loaded";
+			continue;
+		} 
 		images.push_back(image);
 	}
 	return images.size();
@@ -237,13 +252,13 @@ void LiveArt::setup() {
 	// read in all the images the user may want to see
 	for (auto& itr = images.begin(); itr != images.end(); ++itr) {
 		currentImageName = itr->name;
-		readColors(itr->shapes, *itr, ofFile(itr->name + string("image.data.dat")));
+		readColors(*itr, ofFile(itr->name + string("image.data.dat")));
 		// less colors, do not draw on top of each other, find holes
 		for (auto& itr2 = itr->shapes.begin(); itr2 != itr->shapes.end(); ++itr) {
 			// bugbug install backup software
 			// put all results in a vector of PolyLines, then sort by size, then draw, save polylines in a file
 			finder.setTargetColor(itr2->second.color, TRACK_COLOR_RGB);
-			finder.findContours(img);
+			finder.findContours(itr->mat);
 			if (finder.getPolylines().size() > 1) {
 				itr2->second.lines = finder.getPolylines();
 				itr2->second.threshold = threshold;
@@ -264,9 +279,6 @@ void LiveArt::setup() {
 }
 
 void LiveArt::update() {
-	for (auto& itr = images.begin(); itr != images.end(); ++itr) {
-		itr->update();
-	}
 	count = images[currentImage].shapes.size();
 
 }
@@ -279,8 +291,8 @@ void LiveArt::draw() {
 
 	ofSetLineWidth(1);
 
-	images[currentImage].draw(xImage, 0);// test with 2000,2000 image
-
+	//images[currentImage].mat.draw(xImage, 0);// test with 2000,2000 image
+	cvShowImage("", &images[currentImage].mat);
 						  //ofTranslate(300, 0); keep as a reminder
 	if (index >= 0) {
 		ofPushStyle();
@@ -297,11 +309,11 @@ void LiveArt::draw() {
 
 }
 void LiveArt::echo(vector<ofPolyline>&lines) {
-	for (auto& it = images.begin(); it != images.end(); ++it) {
-		it->update();
-	}
+
+	// use this? fillPoly in wrappers.h
 	for (auto& itr = lines.begin(); itr != lines.end(); ++itr) {
 		ofPolyline line = itr->getSmoothed(smoothingSize); //bugbug test this data
+		// cv::Mat dest fillPoly(line, dest); draw dest
 		ofTessellator tess;
 		ofMesh mesh;
 		tess.tessellateToMesh(line, OF_POLY_WINDING_ODD, mesh, true);
