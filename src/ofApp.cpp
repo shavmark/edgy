@@ -28,6 +28,8 @@ void LiveArt::toFile(ofFile& resultsfile, vector<std::pair<ofColor, int>>&dat) {
 		resultsfile << i << ":" << itr->first << ":" << itr->second << "\n";
 		++i;
 	}
+
+	resultsfile.close();
 }
 void LiveArt::toFile(ofFile& resultsfile, vector<ofColor>&dat, bool clear) {
 
@@ -37,6 +39,7 @@ void LiveArt::toFile(ofFile& resultsfile, vector<ofColor>&dat, bool clear) {
 	for (auto itr = dat.begin(); itr != dat.end(); ++itr) {
 		resultsfile << *itr << "\n";
 	}
+	resultsfile.close();
 }
 void LiveArt::fromFile(ofFile& resultsfile, vector<ofColor> &dat) {
 
@@ -47,11 +50,11 @@ void LiveArt::fromFile(ofFile& resultsfile, vector<ofColor> &dat) {
 	}
 }
 
-bool LiveArt::isCool(ofColor&color) {
+bool colorData::isCool() {
 	float h = color.getHue();
 	return (h > 80 && h < 330);
 }
-bool LiveArt::find(Shapes&shapes, ofColor&color, bool add) {
+bool Image::findOrAdd(const ofColor&color, bool add) {
 
 	map<int, colorData>::iterator itr = shapes.find(color.getHex());
 	if (itr != shapes.end()) {
@@ -67,50 +70,49 @@ bool LiveArt::find(Shapes&shapes, ofColor&color, bool add) {
 		return false;
 	}
 }
-bool LiveArt::test(Shapes&shapes, ofColor&color, int i, int j, int k) {
-	ofColor testColor = color;
-	testColor.r += i;
-	testColor.g += j;
-	testColor.b += k;
-	return find(shapes, testColor, false);
+bool Image::testForExistance(ofColor color, int i, int j, int k) {
+	color.r += i;
+	color.g += j;
+	color.b += k;
+	return findOrAdd(color, false);
 }
 // return true if color added
-bool LiveArt::dedupe(Shapes&shapes, ofColor&color, int rangeR, int rangeG, int rangeB) {
+bool Image::dedupe(ofColor color, int rangeR, int rangeG, int rangeB) {
 
 	bool found = false;
 
 	for (int i = 0; i < rangeR && !found; ++i) {
 		for (int j = 0; j < rangeG && !found; ++j) {
 			for (int k = 0; k < rangeB && !found; ++k) {
-				if (test(shapes, color, i, j, k)) {
+				if (testForExistance(color, i, j, k)) {
 					found = true;
 					break;
 				}
-				if (test(shapes, color, i, j, -k)) {
+				if (testForExistance(color, i, j, -k)) {
 					found = true;
 					break;
 				}
-				if (test(shapes, color, i, -j, k)) {
+				if (testForExistance(color, i, -j, k)) {
 					found = true;
 					break;
 				}
-				if (test(shapes, color, i, -j, -k)) {
+				if (testForExistance(color, i, -j, -k)) {
 					found = true;
 					break;
 				}
-				if (test(shapes, color, -i, j, k)) {
+				if (testForExistance(color, -i, j, k)) {
 					found = true;
 					break;
 				}
-				if (test(shapes, color, -i, j, -k)) {
+				if (testForExistance(color, -i, j, -k)) {
 					found = true;
 					break;
 				}
-				if (test(shapes, color, -i, -j, k)) {
+				if (testForExistance(color, -i, -j, k)) {
 					found = true;
 					break;
 				}
-				if (test(shapes, color, -i, -j, -k)) {
+				if (testForExistance(color, -i, -j, -k)) {
 					found = true;
 					break;
 				}
@@ -119,24 +121,25 @@ bool LiveArt::dedupe(Shapes&shapes, ofColor&color, int rangeR, int rangeG, int r
 	}
 
 	if (!found) {
-		if (shapes.find(color.getHex()) == shapes.end()) {
-			// color is not in the list
-			return find(shapes, color, true);
-		}
+		// color is not in the list
+		return findOrAdd(color, true);
 	}
 	return false;
 }
 
-void LiveArt::readColors(Image& image, ofFile& resultsfile) {
+void Image::readColors() {
+	ofFile resultsfile(name + string(".data.dat"), ofFile::WriteOnly);
 
-	if (resultsfile.exists()) {
+	shapes.clear();
+
+	if (resultsfile.exists() && resultsfile.getSize() > 0) {
 		// use it
 		while (resultsfile) {
 			colorData data;
 			resultsfile >> data.color;
-			image.shapes.insert(make_pair(data.color.getHex(), data));
+			shapes.insert(make_pair(data.color.getHex(), data));
 
-			if (!isCool(data.color) && data.color.getBrightness() > 200) {
+			if (!data.isCool() && data.color.getBrightness() > 200) {
 				warm = data.color;// go with most recent
 			}
 		}
@@ -144,37 +147,37 @@ void LiveArt::readColors(Image& image, ofFile& resultsfile) {
 	else {
 		// create it	
 		vector<ofColor> dat;
-		for (int w = 0; w < image.mat.rows; w += 1) {
-			for (int h = 0; h < image.mat.cols; h += 1) {
-				Vec3b bgrPixel = image.mat.at<Vec3b>(w, h);
+		for (int w = 0; w < mat.rows; w += 1) {
+			for (int h = 0; h < mat.cols; h += 1) {
+				Vec3b bgrPixel = mat.at<Vec3b>(w, h);
 				//BGR not RGB
-				ofColor color;
-				color.b= bgrPixel[0];
-				color.g = bgrPixel[1];
-				color.r = bgrPixel[2];
+				colorData data;
+				data.color.b= bgrPixel[0];
+				data.color.g = bgrPixel[1];
+				data.color.r = bgrPixel[2];
 				// bugbug ? save all colors so its easier to tweak data later? maybe a different file?
 
 				bool found;
 				//if (color.r == 255 && color.g == 255 && color.b == 255) {
 				//continue; //ignore white need this to be the back ground color
 				//}
-				if (!isCool(color) && color.getBrightness() > 200) {
-					warm = color;// go with most recent
+				if (!data.isCool() && data.color.getBrightness() > 200) {
+					warm = data.color;// go with most recent
 				}
-				if (color.getBrightness() > 255) { // ignore the super bright stuff
-					color.setBrightness(255); // see what else can be done here
-					found = dedupe(image.shapes, color, 5, 5, 5);
+				if (data.color.getBrightness() > 255) { // ignore the super bright stuff
+					data.color.setBrightness(255); // see what else can be done here
+					found = dedupe(data.color, 5, 5, 5);
 				}
 				else {
-					found = dedupe(image.shapes, color, 5, 5, 5);
+					found = dedupe(data.color, 5, 5, 5);
 				}
 				if (found) {
-					dat.push_back(color);
+					dat.push_back(data.color);
 				}
 				//bugbug make a mid brightness
 			}
 		}
-		toFile(resultsfile, dat, false);
+		LiveArt::toFile(resultsfile, dat, true);
 	}
 }
 
@@ -184,8 +187,6 @@ void LiveArt::setMenu(ofxPanel &gui) {
 	realtime.add(targetColor.set("RGB", 128.0, 0.0, 300.0));
 	realtime.add(count.set("count", 0));
 	realtime.add(index.set("current", 0));
-	realtime.add(targetColor.set("target color", ofColor::white));
-	realtime.add(warm.set("tone", ofColor::black));
 
 	gui.setup(realtime, "setup", 1000, 0);
 
@@ -193,7 +194,6 @@ void LiveArt::setMenu(ofxPanel &gui) {
 	gui.add(settings);
 
 	settings.add(threshold.set("Threshold", 5, 0.0, 255.0));
-
 
 	settings.add(minRadius.set("minRadius", 1, 0.0, 255.0));
 	settings.add(maxRadius.set("maxRadius", 1, 0.0, 255.0));
@@ -209,18 +209,20 @@ void LiveArt::setMenu(ofxPanel &gui) {
 
 }
 bool LiveArt::loadAndFilter(Image& image) {
-	cv::Mat tempMat;
-	loadMat(tempMat, image.name);
-	if (!tempMat.data) {
+	
+	image.img.load(image.name);
+	if (!image.img.load(image.name)) {
 		ofLogError() << image.name << " not loaded";
 		return false;
 	}
-	tempMat.create(xImage, yImage, tempMat.type());
+	image.img.resize(xImage, yImage);
+	cv::Mat tempMat = toCv(image.img);
 	cv::bilateralFilter(tempMat, image.mat, d, sigmaColor, sigmaSpace);
 	return true;
 }
 int LiveArt::getImages() {
 	ofDirectory dir("images");
+	dir.allowExt("jpg"); //jpg only right now but many other types be added
 	dir.listDir();
 	images.clear();
 	for (auto& itr = dir.begin(); itr != dir.end(); ++itr) {
@@ -252,9 +254,10 @@ void LiveArt::setup() {
 	// read in all the images the user may want to see
 	for (auto& itr = images.begin(); itr != images.end(); ++itr) {
 		currentImageName = itr->name;
-		readColors(*itr, ofFile(itr->name + string("image.data.dat")));
+		itr->readColors();
+		itr->drawingData.clear();
 		// less colors, do not draw on top of each other, find holes
-		for (auto& itr2 = itr->shapes.begin(); itr2 != itr->shapes.end(); ++itr) {
+		for (auto& itr2 = itr->shapes.begin(); itr2 != itr->shapes.end(); ++itr2) {
 			// bugbug install backup software
 			// put all results in a vector of PolyLines, then sort by size, then draw, save polylines in a file
 			finder.setTargetColor(itr2->second.color, TRACK_COLOR_RGB);
@@ -262,8 +265,8 @@ void LiveArt::setup() {
 			if (finder.getPolylines().size() > 1) {
 				itr2->second.lines = finder.getPolylines();
 				itr2->second.threshold = threshold;
+				itr->drawingData.push_back(itr2->second); // shadow vector for good sorting
 			}
-			itr->drawingData.push_back(itr2->second); // shadow vector for good sorting
 		}
 		sort(itr->drawingData.begin(), itr->drawingData.end(), [=](colorData&  a, colorData&  b) {
 			return a.color.getSaturation() > a.color.getSaturation();
@@ -271,7 +274,6 @@ void LiveArt::setup() {
 		});
 	}
 
-	warm = ofColor::lightYellow; // default
 
 	// bugbug drop light and dark, use "if light then set lightthresh hold" cleans it all up
 	// bugbug support warm, cools?
@@ -287,19 +289,20 @@ void LiveArt::draw() {
 	ofDrawRectangle(0, 700, 64, 64);
 
 	ofSetColor(ofColor::white);
-	ofSetBackgroundColor(warm);//bugbug use lightest found color
+	ofSetBackgroundColor(images[currentImage].warm);//bugbug use lightest found color
 
 	ofSetLineWidth(1);
 
-	//images[currentImage].mat.draw(xImage, 0);// test with 2000,2000 image
-	cvShowImage("", &images[currentImage].mat);
+	images[currentImage].img.draw(xImage, 0);// test with 2000,2000 image
 						  //ofTranslate(300, 0); keep as a reminder
 	if (index >= 0) {
 		ofPushStyle();
 		// less colors, do not draw on top of each other, find holes
-		ofSetColor(images[currentImage].drawingData[index].color); // varibles here include only show large, or smalll, to create different pictures
-		savedcolors.push_back(images[currentImage].drawingData[index].color);
-		echo(images[currentImage].drawingData[index].lines);
+		if (images[currentImage].drawingData.size() > 0) {
+			ofSetColor(images[currentImage].drawingData[index].color); // varibles here include only show large, or smalll, to create different pictures
+			savedcolors.push_back(images[currentImage].drawingData[index].color);
+			echo(images[currentImage].drawingData[index].lines);
+		}
 		if (++index >= count) {
 			index = -1; // stop
 		}

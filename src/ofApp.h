@@ -7,27 +7,38 @@
 #include <unordered_set>
 using namespace ofxCv;
 using namespace cv;
+
+class colorData {
+public:
+	colorData() {}
+	colorData(const ofColor& data) { color = data; } //bugbut not everything is copied
+	int operator==(const colorData& data) { return data.color == color; }
+	ofColor color;
+	float threshold = 0;
+	vector<ofPolyline> lines;
+	bool isCool();
+};
+typedef map<int, colorData> Shapes;
+class Image {
+public:
+	Image(const string filename) { name = ofToDataPath(string("\\images\\") + filename, true); 	warm = ofColor::lightYellow; }
+
+	bool findOrAdd(const ofColor&color, bool add);
+	bool testForExistance(ofColor color, int i, int j, int k);// test for existance
+	bool dedupe(ofColor color, int rangeR, int rangeG, int rangeB);
+	void readColors();
+
+	string name;
+	Shapes shapes;
+	vector<colorData> drawingData;
+	ofImage img;//both images stored for convince of the progammer
+	cv::Mat mat;
+	ofParameter<ofColor>warm;
+};
+
+
 class LiveArt {
 public:
-	class colorData {
-	public:
-		colorData() {}
-		colorData(const ofColor& data) { color = data; } //bugbut not everything is copied
-		int operator==(const colorData& data) { return data.color == color; }
-		ofColor color;
-		float threshold = 0;
-		vector<ofPolyline> lines;
-	};
-	typedef map<int, colorData> Shapes;
-	class Image {
-	public:
-		Image(const string nme) { name = nme; }
-		string name;
-		Shapes shapes;
-		vector<colorData> drawingData;
-		cv::Mat mat;
-	};
-
 	void setup();
 	void update();
 	void draw();
@@ -35,34 +46,28 @@ public:
 	bool LiveArt::loadAndFilter(Image& image);
 	void setMenu(ofxPanel &gui);
 	void echo(vector<ofPolyline>&lines);
-	bool find(Shapes&shapes, ofColor&color, bool add);
-	bool test(Shapes&shapes, ofColor&color, int i, int j, int k);
-	bool dedupe(Shapes&shapes, ofColor&color, int rangeR, int rangeG, int rangeB);
-	void readColors(Image& image, ofFile& resultsfile);
 	
-	void toFile(ofFile& resultsfile, vector<std::pair<ofColor, int>>&dat);
-	void toFile(ofFile& resultsfile, vector<ofColor>&dat, bool clear);
-	void fromFile(ofFile& resultsfile, vector<ofColor> &dat);
-	static bool isCool(ofColor&color);
+	static void toFile(ofFile& resultsfile, vector<std::pair<ofColor, int>>&dat);
+	static void toFile(ofFile& resultsfile, vector<ofColor>&dat, bool clear);
+	static void fromFile(ofFile& resultsfile, vector<ofColor> &dat);
 
 	// read from xml file, 'r' key will refresh data? 
 
-	ofParameter<float> minRadius = 1;
-	ofParameter<float> maxRadius = 150;
-	ofParameter<bool> findHoles = true;
-	ofParameter<int> smoothingSize = 2;//learn
-	ofParameter<float> smoothingShape = 0.0;//bugbug learn
-	ofParameter<int> xImage = 500;// make bigger when presenting, smaller when getting colors
-	ofParameter<int> yImage = 500;
-	ofParameter<int> d = 15; //bugbug learn for bilateralfilter
-	ofParameter<double> sigmaColor = 80; //bugbug learn for bilateralfilter
-	ofParameter<double> sigmaSpace = 80; //bugbug learn for bilateralfilter
+	ofParameter<float> minRadius;
+	ofParameter<float> maxRadius;
+	ofParameter<bool> findHoles;
+	ofParameter<int> smoothingSize;//learn
+	ofParameter<float> smoothingShape;//bugbug learn
+	ofParameter<int> xImage;// make bigger when presenting, smaller when getting colors
+	ofParameter<int> yImage;
+	ofParameter<int> d; //bugbug learn for bilateralfilter and enable other filters
+	ofParameter<double> sigmaColor; //bugbug learn for bilateralfilter
+	ofParameter<double> sigmaSpace; //bugbug learn for bilateralfilter
 	ofParameter<string>currentImageName;
 	ofParameter<float> threshold;
 	ofParameter<int> count;
 	ofParameter<int> index;
 	ofParameter<ofColor>targetColor;
-	ofParameter<ofColor>warm;
 	ofParameter<int> currentImage = 0;
 	vector<Image> images;
 	
