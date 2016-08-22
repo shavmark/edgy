@@ -32,7 +32,6 @@ public:
 	ofVideoGrabber cam;
 	ofImage gray, edge, sobel;
 	ofImage image;
-	vector<colorData> shapes;
 	
 	cv::Mat img;
 	ofxPanel gui;
@@ -42,12 +41,25 @@ public:
 	ofParameter<int> count;
 	ofParameter<int> index;
 	ofParameter<ofColor>targetColor;
-	ofParameter<bool> generatecolors;
-	vector<ofColor> savedcolors; //bugbug make unique, right now will store dupes
 	ofColor warm;
+	vector<colorData> drawingData;
+
+	// read from xml file, 'r' key will refresh data? 
+
+	float minRadius = 1;
+	float maxRadius = 150;
+	bool findHoles = true;
+	int smoothingSize=2;//learn
+	float smoothingShape = 0.0;//bugbug learn
+	float xImage = 500;// make bigger when presenting, smaller when getting colors
+	float yImage = 500;
+	int d = 15; //bugbug learn for bilateralfilter
+	double sigmaColor = 80; //bugbug learn for bilateralfilter
+	double sigmaSpace = 80; //bugbug learn for bilateralfilter
 
 private:
-	map<int, int> colorhash; //optimization
+	vector<ofColor> savedcolors; //bugbug make unique, right now will store dupes
+	map<int, colorData> shapes; //optimization
 	int savecount = 0;
 	int savex;
 };

@@ -46,18 +46,15 @@ bool isCool(ofColor&color) {
 }
 bool ofApp::find(ofColor&color, bool add) {
 
-	map<int, int>::iterator itr = colorhash.find(color.getHex());
-	if (itr != colorhash.end()) {
-		++itr->second;
+	map<int, colorData>::iterator itr = shapes.find(color.getHex());
+	if (itr != shapes.end()) {
 		return true;
 	}
 	else {
 		if (add) {
 			colorData data;
 			data.color = color;
-			shapes.push_back(data);
-			
-			colorhash.insert(make_pair(color.getHex(), 1));
+			shapes.insert(make_pair(color.getHex(), data));
 			return true;
 		}
 		return false;
@@ -115,9 +112,9 @@ bool ofApp::dedupe(ofColor&color, int rangeR, int rangeG, int rangeB) {
 	}
 
 	if (!found) {
-		map<int, int>::iterator itr = colorhash.find(color.getHex());
+		map<int, colorData>::iterator itr = shapes.find(color.getHex());
 
-		if (itr == colorhash.end()) {
+		if (itr == shapes.end()) {
 			// color is not in the list
 			return find(color, true);
 		}
@@ -133,8 +130,7 @@ void ofApp::readColors() {
 		while (file) {
 			colorData data;
 			file >> data.color;
-			shapes.push_back(data);
-			colorhash.insert(make_pair(data.color.getHex(), 1));
+			shapes.insert(make_pair(data.color.getHex(), data));
 
 			if (!isCool(data.color) && data.color.getBrightness() > 200) {
 				warm = data.color;// go with most recent
@@ -179,19 +175,19 @@ void ofApp::setup() {
 	gui.setup(group, "setup", 1000, 0);
 	gui.add(threshold.set("Threshold", 5, 0.0, 255.0));
 	gui.add(targetColor.set("RGB", 128.0, 0.0, 300.0));
-	gui.add(generatecolors.set("genearate", true));
 	gui.add(count.set("count", 0));
 	gui.add(index.set("current", 0));
 
-	bool b = image.load("photo2.jpg");//bugbug menu ize
-	image.resize(500, 500);
-	warm = ofColor::lightYellow;
-	cv::Mat img2 = toCv(image);
-
-	cv::bilateralFilter(img2, img, 15, 80, 80);
-
 	ofSetFrameRate(120);
+
+	bool b = image.load("photo2.jpg");//bugbug menu ize
+
+	image.resize(xImage, yImage);
+	warm = ofColor::lightYellow; // default
+	cv::Mat img2 = toCv(image);
+	cv::bilateralFilter(img2, img, d, sigmaColor, sigmaSpace); 
 	ofxCv::toOf(img, image);
+
 	image.setImageType(OF_IMAGE_COLOR); // should not need this? TODO any over-head / conversion?
 
 	// bugbug support warm, cools?
@@ -233,33 +229,42 @@ void ofApp::setup() {
 	//ofTranslate(300, 0);
 	// less colors, do not draw on top of each other, find holes
 	ContourFinder finder;
-	finder.setMinAreaRadius(1);
-	finder.setMaxAreaRadius(150);
+	finder.setMinAreaRadius(minRadius);
+
+	finder.setMaxAreaRadius(maxRadius);
+
 	finder.setSimplify(true);
 	finder.setAutoThreshold(false);
 	finder.setThreshold(threshold);
 	finder.setUseTargetColor(true);
-	finder.setFindHoles(true);// matters
-	finder.setSortBySize(false);
+	finder.setFindHoles(findHoles);// matters
 	for (int i = 0; i < count; ++i){
 		//bugbug move this to a function that can be called at any time to reset things
 		//bugbug save getPolylines in a file so redraw is fast
+		// install backup software
 		ofColor color = shapes[i].color;
 		// put all results in a vector of PolyLines, then sort by size, then draw, save polylines in a file
 		finder.setTargetColor(color, TRACK_COLOR_RGB);
 		finder.findContours(img);
 		if (finder.getPolylines().size() > 1) {
 			colorData data(color);
-			vector<colorData>::iterator itr = std::find(shapes.begin(), shapes.end(), data);
+			map<int, colorData>::iterator itr = shapes.find(color.getHex());
 			if (itr != shapes.end()) {
-				itr->lines = finder.getPolylines();
-				itr->threshold = threshold;
+				itr->second.lines = finder.getPolylines();
+				itr->second.threshold = threshold;
 			}
+			// error if not found
 		}
 	}
-	sort(shapes.begin(), shapes.end(), [=](colorData a, colorData b)	{
-		return a.color.getSaturation() > a.color.getSaturation();//bugbug need to add in sort by saturation, brightness, object size etc
+	// vector is used to draw as sort is easy to do
+	for (map<int, colorData>::iterator it = shapes.begin(); it != shapes.end(); ++it) {
+		drawingData.push_back(it->second);
+	}
+	sort(drawingData.begin(), drawingData.end(), [=](colorData&  a, colorData&  b)	{
+		return a.color.getSaturation() > a.color.getSaturation();
+		//bugbug need to add in sort by size, count, saturation, brightness, object size etc
 	});
+
 	ofSetBackgroundAuto(false);
 }// 45shavlik11
  //http://www.creativeapplications.net/tutorials/arduino-servo-opencv-tutorial-openframeworks/
@@ -306,16 +311,15 @@ void ofApp::draw() {
 	//sobel.draw(640, 480);
 	ofSetLineWidth(1);
 
-	ofxCv::toOf(img, image);
-	image.draw(500, 0);// test with 2000,2000 image
+	image.draw(xImage, 0);// test with 2000,2000 image
 
 	//ofTranslate(300, 0); keep as a reminder
 	if (index >= 0) {
 		ofPushStyle();
 		// less colors, do not draw on top of each other, find holes
-		ofSetColor(shapes[index].color); // varibles here include only show large, or smalll, to create different pictures
-		savedcolors.push_back(shapes[index].color);
-		echo(shapes[index].lines);
+		ofSetColor(drawingData[index].color); // varibles here include only show large, or smalll, to create different pictures
+		savedcolors.push_back(drawingData[index].color);
+		echo(drawingData[index].lines);
 		if (++index >= count) {
 			index = -1; // stop
 		}
