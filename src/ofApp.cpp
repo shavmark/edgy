@@ -8,45 +8,41 @@ void LiveArt::snapshot() {
 
 	string filename = "data" + ofToString(savecount++);
 	filename += ".dat";
-	toFile(filename, savedcolors, true);
+	ofFile resultsfile(filename);
+	//resultsfile.open(filename, ofFile::WriteOnly);
+	toFile(resultsfile, savedcolors, true);
+	//resultsfile.close();
 	savedcolors.clear();
 }
 
 
-void LiveArt::toFile(string path, vector<std::pair<ofColor, int>>&dat) {
+void LiveArt::toFile(ofFile& resultsfile, vector<std::pair<ofColor, int>>&dat) {
 
-	ofFile file(path);
-	file.open(path, ofFile::WriteOnly);
 	time_t rawtime;
 	time(&rawtime);
 
-	file << ctime(&rawtime) << "\n";
+	resultsfile << ctime(&rawtime) << "\n";
 
 	int i = 1;
 	for (auto itr = dat.begin(); itr != dat.end(); ++itr) {
-		file << i << ":" << itr->first << ":" << itr->second << "\n";
+		resultsfile << i << ":" << itr->first << ":" << itr->second << "\n";
 		++i;
 	}
-	file.close();
 }
-void LiveArt::toFile(string path, vector<ofColor>&dat, bool clear) {
+void LiveArt::toFile(ofFile& resultsfile, vector<ofColor>&dat, bool clear) {
 
-	ofFile file(path);
-	file.open(path, ofFile::WriteOnly);
 	if (clear) {
-		file.clear();
+		resultsfile.clear();
 	}
 	for (auto itr = dat.begin(); itr != dat.end(); ++itr) {
-		file << *itr << "\n";
+		resultsfile << *itr << "\n";
 	}
-	file.close();
 }
-void LiveArt::fromFile(string path, vector<ofColor> &dat) {
-	ofFile file(path);
+void LiveArt::fromFile(ofFile& resultsfile, vector<ofColor> &dat) {
 
-	while (file) {
+	while (resultsfile) {
 		ofColor cur;
-		file >> cur;
+		resultsfile >> cur;
 		dat.push_back(cur);
 	}
 }
@@ -55,7 +51,7 @@ bool LiveArt::isCool(ofColor&color) {
 	float h = color.getHue();
 	return (h > 80 && h < 330);
 }
-bool LiveArt::find(ofColor&color, bool add) {
+bool LiveArt::find(Shapes&shapes, ofColor&color, bool add) {
 
 	map<int, colorData>::iterator itr = shapes.find(color.getHex());
 	if (itr != shapes.end()) {
@@ -71,50 +67,50 @@ bool LiveArt::find(ofColor&color, bool add) {
 		return false;
 	}
 }
-bool LiveArt::test(ofColor&color, int i, int j, int k) {
+bool LiveArt::test(Shapes&shapes, ofColor&color, int i, int j, int k) {
 	ofColor testColor = color;
 	testColor.r += i;
 	testColor.g += j;
 	testColor.b += k;
-	return find(testColor, false);
+	return find(shapes, testColor, false);
 }
 // return true if color added
-bool LiveArt::dedupe(ofColor&color, int rangeR, int rangeG, int rangeB) {
+bool LiveArt::dedupe(Shapes&shapes, ofColor&color, int rangeR, int rangeG, int rangeB) {
 
 	bool found = false;
 
 	for (int i = 0; i < rangeR && !found; ++i) {
 		for (int j = 0; j < rangeG && !found; ++j) {
 			for (int k = 0; k < rangeB && !found; ++k) {
-				if (test(color, i, j, k)) {
+				if (test(shapes, color, i, j, k)) {
 					found = true;
 					break;
 				}
-				if (test(color, i, j, -k)) {
+				if (test(shapes, color, i, j, -k)) {
 					found = true;
 					break;
 				}
-				if (test(color, i, -j, k)) {
+				if (test(shapes, color, i, -j, k)) {
 					found = true;
 					break;
 				}
-				if (test(color, i, -j, -k)) {
+				if (test(shapes, color, i, -j, -k)) {
 					found = true;
 					break;
 				}
-				if (test(color, -i, j, k)) {
+				if (test(shapes, color, -i, j, k)) {
 					found = true;
 					break;
 				}
-				if (test(color, -i, j, -k)) {
+				if (test(shapes, color, -i, j, -k)) {
 					found = true;
 					break;
 				}
-				if (test(color, -i, -j, k)) {
+				if (test(shapes, color, -i, -j, k)) {
 					found = true;
 					break;
 				}
-				if (test(color, -i, -j, -k)) {
+				if (test(shapes, color, -i, -j, -k)) {
 					found = true;
 					break;
 				}
@@ -123,25 +119,21 @@ bool LiveArt::dedupe(ofColor&color, int rangeR, int rangeG, int rangeB) {
 	}
 
 	if (!found) {
-		map<int, colorData>::iterator itr = shapes.find(color.getHex());
-
-		if (itr == shapes.end()) {
+		if (shapes.find(color.getHex()) == shapes.end()) {
 			// color is not in the list
-			return find(color, true);
+			return find(shapes, color, true);
 		}
 	}
 	return false;
 }
 
-void LiveArt::readColors() {
-	string filename = imagePath;
-	filename += ".pic.dat";
-	ofFile file(filename);
-	if (file.exists()) {
+void LiveArt::readColors(Shapes&shapes, const ofImage& image, ofFile& resultsfile) {
+
+	if (resultsfile.exists()) {
 		// use it
-		while (file) {
+		while (resultsfile) {
 			colorData data;
-			file >> data.color;
+			resultsfile >> data.color;
 			shapes.insert(make_pair(data.color.getHex(), data));
 
 			if (!isCool(data.color) && data.color.getBrightness() > 200) {
@@ -152,7 +144,6 @@ void LiveArt::readColors() {
 	else {
 		// create it	
 		vector<ofColor> dat;
-
 		for (int w = 0; w < image.getWidth(); w += 1) {
 			for (int h = 0; h < image.getHeight(); h += 1) {
 				ofColor color = image.getPixels().getColor(w, h);
@@ -167,10 +158,10 @@ void LiveArt::readColors() {
 				}
 				if (color.getBrightness() > 255) { // ignore the super bright stuff
 					color.setBrightness(255); // see what else can be done here
-					found = dedupe(color, 5, 5, 5);
+					found = dedupe(shapes, color, 5, 5, 5);
 				}
 				else {
-					found = dedupe(color, 5, 5, 5);
+					found = dedupe(shapes, color, 5, 5, 5);
 				}
 				if (found) {
 					dat.push_back(color);
@@ -178,7 +169,7 @@ void LiveArt::readColors() {
 				//bugbug make a mid brightness
 			}
 		}
-		toFile(filename, dat, false);
+		toFile(resultsfile, dat, false);
 	}
 }
 
@@ -209,74 +200,75 @@ void LiveArt::setMenu(ofxPanel &gui) {
 	settings.add(d.set("d", 15, 0.0, 255.0));
 	settings.add(sigmaColor.set("sigmaColor", 80, 0.0, 255.0));
 	settings.add(sigmaSpace.set("sigmaSpace", 80, 0.0, 255.0));
-	settings.add(imagePath.set("imagePath"));
-	settings.add(imagePath.set("imagePath"));
-	settings.add(imagePath.set("imagePath"));
-	settings.add(imagePath.set("imagePath"));
+	settings.add(currentImageName.set("currentImageName"));
 
 }
+int LiveArt::getImages() {
+	ofDirectory dir("images");
+	dir.listDir();
+	images.clear();
+	for (auto& itr = dir.begin(); itr != dir.end(); ++itr) {
+		Image image(itr->getFileName());
+		image.load(image.name);
+		image.resize(xImage, yImage);
+		cv::Mat img2 = toCv(image);
+		cv::bilateralFilter(img2, img, d, sigmaColor, sigmaSpace);
+		ofxCv::toOf(img, image);
+		images.push_back(image);
+	}
+	return images.size();
+}
 void LiveArt::setup() {
-	bool b = image.load(imagePath);//bugbug menu ize
+	
+	if (!getImages()) {
+		ofLogFatalError() << "no images in data\\images directory";
+		return;
+	}
 
-	image.resize(xImage, yImage);
-	warm = ofColor::lightYellow; // default
-	cv::Mat img2 = toCv(image);
-	cv::bilateralFilter(img2, img, d, sigmaColor, sigmaSpace);
-	ofxCv::toOf(img, image);
-
-	image.setImageType(OF_IMAGE_COLOR); // should not need this? TODO any over-head / conversion?
-
-										// bugbug drop light and dark, use "if light then set lightthresh hold" cleans it all up
-										// bugbug support warm, cools?
-
-	readColors();
-
-	count = shapes.size();
-
-	//ofTranslate(300, 0);
-	// less colors, do not draw on top of each other, find holes
 	ContourFinder finder;
 	finder.setMinAreaRadius(minRadius);
-
 	finder.setMaxAreaRadius(maxRadius);
-
 	finder.setSimplify(true);
 	finder.setAutoThreshold(false);
 	finder.setThreshold(threshold);
 	finder.setUseTargetColor(true);
 	finder.setFindHoles(findHoles);// matters
-	for (int i = 0; i < count; ++i) {
-		//bugbug move this to a function that can be called at any time to reset things
-		//bugbug save getPolylines in a file so redraw is fast
-		// install backup software
-		ofColor color = shapes[i].color;
-		// put all results in a vector of PolyLines, then sort by size, then draw, save polylines in a file
-		finder.setTargetColor(color, TRACK_COLOR_RGB);
-		finder.findContours(img);
-		if (finder.getPolylines().size() > 1) {
-			colorData data(color);
-			map<int, colorData>::iterator itr = shapes.find(color.getHex());
-			if (itr != shapes.end()) {
-				itr->second.lines = finder.getPolylines();
-				itr->second.threshold = threshold;
-			}
-			// error if not found
-		}
-	}
-	// vector is used to draw as sort is easy to do
-	for (map<int, colorData>::iterator it = shapes.begin(); it != shapes.end(); ++it) {
-		drawingData.push_back(it->second);
-	}
-	sort(drawingData.begin(), drawingData.end(), [=](colorData&  a, colorData&  b) {
-		return a.color.getSaturation() > a.color.getSaturation();
-		//bugbug need to add in sort by size, count, saturation, brightness, object size etc
-	});
 
+	// read in all the images the user may want to see
+	for (auto& itr = images.begin(); itr != images.end(); ++itr) {
+		currentImageName = itr->name;
+		readColors(itr->shapes, *itr, ofFile(itr->name + string("image.data.dat")));
+		// less colors, do not draw on top of each other, find holes
+		for (auto& itr2 = itr->shapes.begin(); itr2 != itr->shapes.end(); ++itr) {
+			// bugbug install backup software
+			// put all results in a vector of PolyLines, then sort by size, then draw, save polylines in a file
+			finder.setTargetColor(itr2->second.color, TRACK_COLOR_RGB);
+			finder.findContours(img);
+			if (finder.getPolylines().size() > 1) {
+				itr2->second.lines = finder.getPolylines();
+				itr2->second.threshold = threshold;
+			}
+			itr->drawingData.push_back(itr2->second); // shadow vector for good sorting
+		}
+		sort(itr->drawingData.begin(), itr->drawingData.end(), [=](colorData&  a, colorData&  b) {
+			return a.color.getSaturation() > a.color.getSaturation();
+			//bugbug need to add in sort by size, count, saturation, brightness, object size etc
+		});
+	}
+
+	warm = ofColor::lightYellow; // default
+
+	// bugbug drop light and dark, use "if light then set lightthresh hold" cleans it all up
+	// bugbug support warm, cools?
 
 }
 
 void LiveArt::update() {
-	image.update();
+	for (auto& itr = images.begin(); itr != images.end(); ++itr) {
+		itr->update();
+	}
+	count = images[currentImage].shapes.size();
+
 }
 void LiveArt::draw() {
 	ofSetColor(targetColor);
@@ -287,15 +279,15 @@ void LiveArt::draw() {
 
 	ofSetLineWidth(1);
 
-	image.draw(xImage, 0);// test with 2000,2000 image
+	images[currentImage].draw(xImage, 0);// test with 2000,2000 image
 
 						  //ofTranslate(300, 0); keep as a reminder
 	if (index >= 0) {
 		ofPushStyle();
 		// less colors, do not draw on top of each other, find holes
-		ofSetColor(drawingData[index].color); // varibles here include only show large, or smalll, to create different pictures
-		savedcolors.push_back(drawingData[index].color);
-		echo(drawingData[index].lines);
+		ofSetColor(images[currentImage].drawingData[index].color); // varibles here include only show large, or smalll, to create different pictures
+		savedcolors.push_back(images[currentImage].drawingData[index].color);
+		echo(images[currentImage].drawingData[index].lines);
 		if (++index >= count) {
 			index = -1; // stop
 		}
@@ -305,9 +297,11 @@ void LiveArt::draw() {
 
 }
 void LiveArt::echo(vector<ofPolyline>&lines) {
-
-	for (int j = 0; j <lines.size(); j++) {
-		ofPolyline line = lines[j].getSmoothed(2); //bugbug test this data
+	for (auto& it = images.begin(); it != images.end(); ++it) {
+		it->update();
+	}
+	for (auto& itr = lines.begin(); itr != lines.end(); ++itr) {
+		ofPolyline line = itr->getSmoothed(smoothingSize); //bugbug test this data
 		ofTessellator tess;
 		ofMesh mesh;
 		tess.tessellateToMesh(line, OF_POLY_WINDING_ODD, mesh, true);
@@ -317,13 +311,13 @@ void LiveArt::echo(vector<ofPolyline>&lines) {
 }
 
 void ofApp::setup() {
+	art.setMenu(gui);
+
 	cam.setup(640, 480);
 
 	ofSetFrameRate(120);
 	
 	art.setup();
-	art.setMenu(gui);
-
 
 	ofSetBackgroundAuto(false);
 }// 45shavlik11
@@ -365,7 +359,13 @@ void ofApp::keyPressed(int key) {
 			art.snapshot();
 		}
 	}
-	else if (key == 'g') {
+	else if (key == 'i') {
+		art.currentImage++;
+		if (art.currentImage > art.images.size()) {
+			art.currentImage = 0;
+		}
+	}
+	else if (key == 's') {
 		art.index = 0; // go from start
 	}
 	else if (key == 'b') {

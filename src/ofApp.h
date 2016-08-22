@@ -18,6 +18,14 @@ public:
 		float threshold = 0;
 		vector<ofPolyline> lines;
 	};
+	typedef map<int, colorData> Shapes;
+	class Image : public ofImage {
+	public:
+		Image(const string nme) { name = nme; }
+		string name;
+		Shapes shapes; 
+		vector<colorData> drawingData;
+	};
 
 	void setup();
 	void update();
@@ -25,16 +33,15 @@ public:
 
 	void setMenu(ofxPanel &gui);
 	void echo(vector<ofPolyline>&lines);
-	bool find(ofColor&color, bool add);
-	bool test(ofColor&color, int i, int j, int k);
-	bool dedupe(ofColor&color, int rangeR, int rangeG, int rangeB);
-	void readColors();
+	bool find(Shapes&shapes, ofColor&color, bool add);
+	bool test(Shapes&shapes, ofColor&color, int i, int j, int k);
+	bool dedupe(Shapes&shapes, ofColor&color, int rangeR, int rangeG, int rangeB);
+	void readColors(Shapes&shapes, const ofImage& image, ofFile& resultsfile);
 	
-	void toFile(string path, vector<std::pair<ofColor, int>>&dat);
-	void toFile(string path, vector<ofColor>&dat, bool clear);
-	void fromFile(string path, vector<ofColor> &dat);
+	void toFile(ofFile& resultsfile, vector<std::pair<ofColor, int>>&dat);
+	void toFile(ofFile& resultsfile, vector<ofColor>&dat, bool clear);
+	void fromFile(ofFile& resultsfile, vector<ofColor> &dat);
 	static bool isCool(ofColor&color);
-	vector<colorData> drawingData;
 
 	// read from xml file, 'r' key will refresh data? 
 
@@ -48,25 +55,24 @@ public:
 	ofParameter<int> d = 15; //bugbug learn for bilateralfilter
 	ofParameter<double> sigmaColor = 80; //bugbug learn for bilateralfilter
 	ofParameter<double> sigmaSpace = 80; //bugbug learn for bilateralfilter
-	ofParameter<string> imagePath = "photo2.jpg";
-
+	ofParameter<string>currentImageName;
 	ofParameter<float> threshold;
 	ofParameter<int> count;
 	ofParameter<int> index;
 	ofParameter<ofColor>targetColor;
 	ofParameter<ofColor>warm;
-
-	ofImage image;
+	ofParameter<int> currentImage = 0;
+	vector<Image> images;
 	cv::Mat img;
 	
 	void snapshot();
 	void restore(){ index = savex; }
 
 private:
-	map<int, colorData> shapes; //optimization
 	vector<ofColor> savedcolors; //bugbug make unique, right now will store dupes
 	int savex = 0;
 	int savecount = 0;
+	int getImages();
 
 };
 class ofApp : public ofBaseApp {
