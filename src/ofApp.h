@@ -37,8 +37,10 @@ public:
 	ofParameter<ofColor>warm;
 	ofParameter<int> shrinkby = 3;
 	string logDir="logs\\";
+	bool readIn = false;
 private:
 	static void rgb2ryb(unsigned char &r, unsigned char g, unsigned char &b, unsigned char&y);
+
 };
 
 
@@ -94,7 +96,7 @@ private:
 	int savex = 0;
 	int savecount = 0;
 	int getImages();
-
+	bool readIn = false;
 };
 class ofApp : public ofBaseApp {
 public:

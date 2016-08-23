@@ -356,6 +356,10 @@ int LiveArt::getImages() {
 		} 
 		images.push_back(image);
 	}
+	if (images.size() > 0) {
+		currentImageName = images[0].shortname;
+	}
+
 	return images.size();
 }
 void LiveArt::setup() {
@@ -363,9 +367,12 @@ void LiveArt::setup() {
 	SetCursor(LoadCursor(NULL, IDC_WAIT)); // the sin of windows
 	index = 0;
 
-	if (!getImages()) {
-		ofLogFatalError() << "no images in data\\images directory";
-		return;
+	if (!readIn) {
+		if (!getImages()) {
+			ofLogFatalError() << "no images in data\\images directory";
+			return;
+		}
+		readIn = true;
 	}
 
 	ContourFinder finder;
@@ -379,7 +386,15 @@ void LiveArt::setup() {
 
 	// read in all the images the user may want to see
 	for (auto& itr = images.begin(); itr != images.end(); ++itr) {
-		itr->readColors();
+		if (itr->shortname != currentImageName.get()) {
+			ofLog() << "ignore " << itr->name << endl;
+			continue;
+		}
+		ofLog() << itr->name << endl;
+		if (!itr->readIn) {
+			itr->readColors(); // bugbug read all in, in the future only read in what is shown
+			itr->readIn = true;
+		}
 		itr->drawingData.clear();
 		// less colors, do not draw on top of each other, find holes
 		for (auto& itr2 = itr->shapes.begin(); itr2 != itr->shapes.end(); ++itr2) {
@@ -393,6 +408,7 @@ void LiveArt::setup() {
 				itr->drawingData.push_back(itr2->second); // shadow vector for good sorting
 			}
 		}
+		ofLog() << "sort " << itr->shortname << endl;
 		sort(itr->drawingData.begin(), itr->drawingData.end(), [=](colorData&  a, colorData&  b) {
 			switch (sortby) {
 			case 0:
