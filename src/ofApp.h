@@ -27,7 +27,7 @@ public:
 	bool testForExistance(ofColor color, int i, int j, int k);// test for existance
 	bool dedupe(ofColor color, int rangeR, int rangeG, int rangeB);
 	void readColors();
-
+	static void rgbToryb(const ofColor& in, ofParameter<ofColor>& red, ofParameter<ofColor>& yellow, ofParameter<ofColor>& blue);
 	string name;
 	string shortname;
 	Shapes shapes;
@@ -37,7 +37,8 @@ public:
 	ofParameter<ofColor>warm;
 	ofParameter<int> shrinkby = 3;
 	string logDir="logs\\";
-
+private:
+	static void rgb2ryb(unsigned char &r, unsigned char g, unsigned char &b, unsigned char&y);
 };
 
 
@@ -50,11 +51,15 @@ public:
 	bool LiveArt::loadAndFilter(Image& image);
 	void setMenu(ofxPanel &gui);
 	void echo(vector<ofPolyline>&lines);
-	
+	void setTargetColor(const ofColor&c);
 	static void toFile(ofFile& resultsfile, vector<std::pair<ofColor, int>>&dat);
 	static void toFile(ofFile& resultsfile, vector<ofColor>&dat, bool clear);
 	static void fromFile(ofFile& resultsfile, vector<ofColor> &dat);
-
+	void haveBeenNotifiedFloat(float &f);
+	void haveBeenNotifiedInt(int &i);
+	void haveBeenNotifiedBool(bool &b);
+	void haveBeenNotifiedDouble(double &d);
+	void redoButtonPressed();
 	// read from xml file, 'r' key will refresh data? 
 
 	ofParameter<float> minRadius;
@@ -72,9 +77,14 @@ public:
 	ofParameter<int> count;
 	ofParameter<int> index;
 	ofParameter<ofColor>targetColor;
+	ofxButton redo;
+	ofParameter<ofColor>red;
+	ofParameter<ofColor>yellow;
+	ofParameter<ofColor>blue;
+
 	ofParameter<int> currentImage = 0;
 	vector<Image> images;
-	ofParameter<int> searchBy=1;
+	ofParameter<int> sortby=0;
 
 	void snapshot(const string& name);
 	void restore(){ index = savex; }
@@ -93,6 +103,7 @@ public:
 	void update();
 	void draw();
 	void keyPressed(int key);
+	void mousePressed(int x, int y, int button);
 	ofVideoGrabber cam;
 	ofImage gray, edge, sobel;
 	ofxPanel gui;

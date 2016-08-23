@@ -16,7 +16,73 @@ void LiveArt::snapshot(const string& name) {
 	//resultsfile.close();
 	savedcolors.clear();
 }
+void LiveArt::setTargetColor(const ofColor&c) {
+	targetColor = c;
+	Image::rgbToryb(targetColor, red, yellow, blue);
+}
 
+void Image::rgbToryb(const ofColor& in, ofParameter<ofColor>& red, ofParameter<ofColor>& yellow, ofParameter<ofColor>& blue) {
+	unsigned char r = in.r;
+	unsigned char b = in.b;
+	unsigned char y = 0;
+
+	rgb2ryb(r, in.g, b, y);
+
+	red.set(ofColor(r, 0, 0));
+	yellow.set(ofColor(y, y, 0));
+	blue.set(ofColor(0, 0, b));
+}
+
+//http://www.deathbysoftware.com/colors/index.html
+void Image::rgb2ryb(unsigned char &r, unsigned char g, unsigned char &b, unsigned char&y) {
+	// Remove the white from the color
+	unsigned char iWhite = min(r, min(g, b));
+
+	r -= iWhite;
+	g -= iWhite;
+	b -= iWhite;
+
+	unsigned char iMaxGreen = max(r, max(g, b));
+
+	// Get the yellow out of the red+green
+
+	y = min(r, g);
+
+	r -= y;
+	g -= y;
+
+	// If this unfortunate conversion combines blue and green, then cut each in half to
+	// preserve the value's maximum range.
+	if (b > 0 && b > 0) {
+		b /= 2;
+		g /= 2;
+	}
+
+	// Redistribute the remaining green.
+	y += g;
+	b += g;
+
+	// Normalize to values.
+	unsigned char iMaxYellow = max(r, max(y, b));
+
+	if (iMaxYellow > 0) {
+		unsigned char iN = iMaxGreen / iMaxYellow;
+
+		r *= iN;
+		y *= iN;
+		b *= iN;
+	}
+
+	// Add the white back in.
+	r += iWhite;
+	y += iWhite;
+	b += iWhite;
+
+	r = floor(r);
+	y = floor(y);
+	b = floor(b);
+
+}
 
 void LiveArt::toFile(ofFile& resultsfile, vector<std::pair<ofColor, int>>&dat) {
 
@@ -38,9 +104,12 @@ void LiveArt::toFile(ofFile& resultsfile, vector<ofColor>&dat, bool clear) {
 	if (clear) {
 		resultsfile.clear();
 	}
+	ofBuffer buffer;
+	buffer.allocate(dat.size());
 	for (auto itr = dat.begin(); itr != dat.end(); ++itr) {
-		resultsfile << *itr << "\n";
+		buffer.append(ofToString(itr->getHex()) + "\n");
 	}
+	resultsfile.writeFromBuffer(buffer);
 	resultsfile.close();
 }
 void LiveArt::fromFile(ofFile& resultsfile, vector<ofColor> &dat) {
@@ -142,9 +211,15 @@ void Image::readColors() {
 
 	if (resultsfile.exists()) {
 		// use it
-		while (resultsfile) {
-			colorData data;
-			resultsfile >> data.color;
+		ofLog() << "use data" << logDir << endl;
+		ofBuffer buffer = ofBufferFromFile(logDir);
+		for (auto line : buffer.getLines()) {
+			int hex = ofToInt(line);
+			if (!hex) {
+				continue;
+			}
+			colorData data; // each line is a hex
+			data.color.setHex(ofToInt(line));//bugbug alpha ignored
 			shapes.insert(make_pair(data.color.getHex(), data));
 
 			if (!data.isCool() && data.color.getBrightness() > 200) {
@@ -154,7 +229,7 @@ void Image::readColors() {
 	}
 	else {
 		// create it	
-		resultsfile.open(logDir, ofFile::WriteOnly);
+		ofLog() << "create data" << logDir << endl;
 		vector<ofColor> dat;
 		for (int w = 0; w < img.getWidth(); w += 1) {
 			for (int h = 0; h < img.getHeight(); h += 1) {
@@ -182,20 +257,40 @@ void Image::readColors() {
 				//bugbug make a mid brightness
 			}
 		}
+		resultsfile.open(logDir, ofFile::WriteOnly);
 		LiveArt::toFile(resultsfile, dat, true);
 	}
 }
+void LiveArt::haveBeenNotifiedFloat(float &f) {
+	ofLog() << " event at " << f << endl;
+}
+void LiveArt::haveBeenNotifiedInt(int &i) {
+	ofLog() << " event at " << i << endl;
+}
+void LiveArt::haveBeenNotifiedBool(bool &b) {
+	ofLog() << " event at " << b << endl;
+}
+void LiveArt::haveBeenNotifiedDouble(double &d) {
+	ofLog() << " event at " << d << endl;
+}
+void LiveArt::redoButtonPressed() {
+	ofLog() << " event at redo " << endl;
+	setup();
+}
 
 void LiveArt::setMenu(ofxPanel &gui) {
-	//https://github.com/frauzufall/ofxGuiExtended
-	ofParameterGroup realtime;
-	realtime.add(targetColor.set("RGB", 128.0, 0.0, 300.0));
-	realtime.add(count.set("count", 0));
-	realtime.add(index.set("current", 0));
 
+	//consider https://github.com/frauzufall/ofxGuiExtended
+	ofxGuiSetTextPadding(4);
+
+	ofParameterGroup realtime;
+	realtime.add(targetColor.set("RGB", targetColor, 0.0, 255.0));
+	realtime.add(count.set("count", 0));
+	realtime.add(index.set("current", -1, 0, count));
 	gui.setup(realtime, "setup", 1000, 0);
 
 	ofParameterGroup settings;
+	settings.setName("settings");
 
 	settings.add(threshold.set("Threshold", 5, 0.0, 255.0));
 
@@ -210,7 +305,30 @@ void LiveArt::setMenu(ofxPanel &gui) {
 	settings.add(sigmaColor.set("sigmaColor", 80, 0.0, 255.0));
 	settings.add(sigmaSpace.set("sigmaSpace", 80, 0.0, 255.0));
 	settings.add(currentImageName.set("currentImageName"));
+	settings.add(sortby.set("sort", 0, 0, 5));
+	redo.setup("run");
+	gui.add(&redo);
+	redo.addListener(this, &LiveArt::redoButtonPressed);
+
+	// all float changes for a reset
+	threshold.addListener(this, &LiveArt::haveBeenNotifiedFloat);
+	minRadius.addListener(this, &LiveArt::haveBeenNotifiedFloat);
+	maxRadius.addListener(this, &LiveArt::haveBeenNotifiedFloat);
+	smoothingShape.addListener(this, &LiveArt::haveBeenNotifiedFloat);
+	smoothingSize.addListener(this, &LiveArt::haveBeenNotifiedInt);
+	d.addListener(this, &LiveArt::haveBeenNotifiedInt);
+	findHoles.addListener(this, &LiveArt::haveBeenNotifiedBool);
+	sigmaColor.addListener(this, &LiveArt::haveBeenNotifiedDouble);
+	sigmaSpace.addListener(this, &LiveArt::haveBeenNotifiedDouble);
+
+	gui.add(settings);
+	ofParameterGroup ryb;
+	ryb.setName("RYB");
+	ryb.add(red.set("r", red, 0.0, 255.0));
+	ryb.add(yellow.set("y", yellow, 0.0, 255.0));
+	ryb.add(blue.set("b", blue, 0.0, 255.0));
 	
+	gui.add(ryb);
 
 }
 bool LiveArt::loadAndFilter(Image& image) {
@@ -241,7 +359,10 @@ int LiveArt::getImages() {
 	return images.size();
 }
 void LiveArt::setup() {
-	
+	ofLog() << "setup" << endl;
+	SetCursor(LoadCursor(NULL, IDC_WAIT)); // the sin of windows
+	index = 0;
+
 	if (!getImages()) {
 		ofLogFatalError() << "no images in data\\images directory";
 		return;
@@ -258,7 +379,6 @@ void LiveArt::setup() {
 
 	// read in all the images the user may want to see
 	for (auto& itr = images.begin(); itr != images.end(); ++itr) {
-		currentImageName = itr->shortname;
 		itr->readColors();
 		itr->drawingData.clear();
 		// less colors, do not draw on top of each other, find holes
@@ -274,7 +394,26 @@ void LiveArt::setup() {
 			}
 		}
 		sort(itr->drawingData.begin(), itr->drawingData.end(), [=](colorData&  a, colorData&  b) {
-			return a.color.getSaturation() > a.color.getSaturation();
+			switch (sortby) {
+			case 0:
+				return a.color.getSaturation() > a.color.getSaturation();//bugbug this bug works!!
+			case 1:
+				return a.lines.size() > b.lines.size();
+			case 2:
+				if (a.color.getSaturation() == a.color.getSaturation()) {
+					return a.lines.size() > b.lines.size();
+				}
+				return  a.color.getSaturation() > a.color.getSaturation();
+			case 3:
+				if (a.lines.size() == a.lines.size()) {
+					return a.color.getSaturation() > b.color.getSaturation();
+				}
+				return  a.lines.size() > a.lines.size();
+			case 4:
+				return a.color.getSaturation() > b.color.getSaturation();
+			default:
+				return a.color.getSaturation() > b.color.getSaturation();
+			}
 			//bugbug need to add in sort by size, count, saturation, brightness, object size etc
 		});
 	}
@@ -287,11 +426,11 @@ void LiveArt::setup() {
 
 void LiveArt::update() {
 	count = images[currentImage].shapes.size();
-
 }
 void LiveArt::draw() {
+
 	ofSetBackgroundColor(ofColor::white);
-	images[currentImage].img.draw(xImage, 0);// test with 2000,2000 image
+	images[currentImage].img.draw(0, 0);// test with 2000,2000 image
 
 	ofSetColor(ofColor::white);
 	ofSetBackgroundColor(images[currentImage].warm);//bugbug use lightest found color
@@ -304,9 +443,10 @@ void LiveArt::draw() {
 
 	if (index > -1 && images[currentImage].drawingData.size() > 0) {
 		if (index < images[currentImage].drawingData.size()) {
+			currentImageName = images[currentImage].shortname;
 			ofPushStyle();
 			// less colors, do not draw on top of each other, find holes
-			targetColor = images[currentImage].drawingData[index].color;
+			setTargetColor(images[currentImage].drawingData[index].color);
 			ofSetColor(targetColor); // varibles here include only show large, or smalll, to create different pictures
 			savedcolors.push_back(targetColor);
 			echo(images[currentImage].drawingData[index].lines);
@@ -317,12 +457,12 @@ void LiveArt::draw() {
 			index = -1; // stop
 		}
 	}
-
-
 }
 void LiveArt::echo(vector<ofPolyline>&lines) {
 
 	// use this? fillPoly in wrappers.h
+
+	ofTranslate(xImage, 0);
 	for (auto& itr = lines.begin(); itr != lines.end(); ++itr) {
 		ofPolyline line = itr->getSmoothed(smoothingSize); //bugbug test this data
 		// cv::Mat dest fillPoly(line, dest); draw dest
@@ -364,8 +504,8 @@ void ofApp::update() {
 
 }
 void ofApp::draw() {
-	art.draw();
 	gui.draw();
+	art.draw();
 
 	//ofFill();
 	//cam.draw(0, 0);
@@ -402,4 +542,11 @@ void ofApp::keyPressed(int key) {
 			art.index = 0;
 		}
 	}
+}
+void ofApp::mousePressed(int x, int y, int button) {
+
+	if (x < art.images[art.currentImage].img.getWidth() && y < art.images[art.currentImage].img.getHeight()) {
+		art.setTargetColor(art.images[art.currentImage].img.getColor(x, y)); //bugbug make it scan just for this in the future
+	}
+
 }
