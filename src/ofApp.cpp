@@ -148,15 +148,11 @@ void Image::readColors() {
 		// create it	
 		resultsfile.open(name + string(".data.dat"), ofFile::WriteOnly);
 		vector<ofColor> dat;
-		for (int w = 0; w < mat.rows; w += 1) {
-			for (int h = 0; h < mat.cols; h += 1) {
-				Vec3b bgrPixel = mat.at<Vec3b>(w, h);
-				//BGR not RGB
+		for (int w = 0; w < img.getWidth(); w += 1) {
+			for (int h = 0; h < img.getHeight(); h += 1) {
 				colorData data;
-				data.color.b= bgrPixel[0];
-				data.color.g = bgrPixel[1];
-				data.color.r = bgrPixel[2];
-				// bugbug ? save all colors so its easier to tweak data later? maybe a different file?
+				data.color = img.getPixels().getColor(w, h);
+				// bugbug ? save all colors in a file so its easier to tweak data later? maybe a different file?
 
 				bool found;
 				//if (color.r == 255 && color.g == 255 && color.b == 255) {
@@ -167,10 +163,10 @@ void Image::readColors() {
 				}
 				if (data.color.getBrightness() > 255) { // ignore the super bright stuff
 					data.color.setBrightness(255); // see what else can be done here
-					found = dedupe(data.color, 5, 5, 5);
+					found = dedupe(data.color, shrinkby, shrinkby, shrinkby);
 				}
 				else {
-					found = dedupe(data.color, 5, 5, 5);
+					found = dedupe(data.color, shrinkby, shrinkby, shrinkby);
 				}
 				if (found) {
 					dat.push_back(data.color);
@@ -287,6 +283,9 @@ void LiveArt::update() {
 
 }
 void LiveArt::draw() {
+	ofSetBackgroundColor(ofColor::white);
+	images[currentImage].img.draw(xImage, 0);// test with 2000,2000 image
+
 	ofSetColor(targetColor);
 	ofDrawRectangle(0, 700, 64, 64);
 
@@ -295,7 +294,6 @@ void LiveArt::draw() {
 
 	ofSetLineWidth(1);
 
-	images[currentImage].img.draw(xImage, 0);// test with 2000,2000 image
 	
 	//ofTranslate(300, 0); keep as a reminder
 
@@ -383,9 +381,10 @@ void ofApp::keyPressed(int key) {
 	}
 	else if (key == 'i') {
 		art.currentImage++;
-		if (art.currentImage > art.images.size()) {
+		if (art.currentImage >= art.images.size()) {
 			art.currentImage = 0;
 		}
+		art.index = 0;
 	}
 	else if (key == 's') {
 		art.index = 0; // go from start

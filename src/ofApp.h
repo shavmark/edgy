@@ -31,9 +31,11 @@ public:
 	string name;
 	Shapes shapes;
 	vector<colorData> drawingData;
-	ofImage img;//both images stored for convince of the progammer
+	ofImage img;//both images stored for Convenience  of the progammer
 	cv::Mat mat;
 	ofParameter<ofColor>warm;
+	ofParameter<int> shrinkby = 3;
+
 };
 
 
@@ -70,7 +72,8 @@ public:
 	ofParameter<ofColor>targetColor;
 	ofParameter<int> currentImage = 0;
 	vector<Image> images;
-	
+	ofParameter<int> searchBy=1;
+
 	void snapshot();
 	void restore(){ index = savex; }
 
