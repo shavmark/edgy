@@ -293,14 +293,10 @@ void LiveArt::draw() {
 	ofSetBackgroundColor(ofColor::white);
 	images[currentImage].img.draw(xImage, 0);// test with 2000,2000 image
 
-	ofSetColor(targetColor);
-	ofDrawRectangle(0, 700, 64, 64);
-
 	ofSetColor(ofColor::white);
 	ofSetBackgroundColor(images[currentImage].warm);//bugbug use lightest found color
 
 	ofSetLineWidth(1);
-
 	
 	//ofTranslate(300, 0); keep as a reminder
 
