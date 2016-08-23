@@ -21,7 +21,7 @@ public:
 typedef map<int, colorData> Shapes;
 class Image {
 public:
-	Image(const string filename) { name = ofToDataPath(string("\\images\\") + filename, true); 	warm = ofColor::lightYellow; }
+	Image(const string& filename);
 
 	bool findOrAdd(const ofColor&color, bool add);
 	bool testForExistance(ofColor color, int i, int j, int k);// test for existance
@@ -29,12 +29,14 @@ public:
 	void readColors();
 
 	string name;
+	string shortname;
 	Shapes shapes;
 	vector<colorData> drawingData;
 	ofImage img;//both images stored for Convenience  of the progammer
 	cv::Mat mat;
 	ofParameter<ofColor>warm;
 	ofParameter<int> shrinkby = 3;
+	string logDir="logs\\";
 
 };
 
@@ -74,7 +76,7 @@ public:
 	vector<Image> images;
 	ofParameter<int> searchBy=1;
 
-	void snapshot();
+	void snapshot(const string& name);
 	void restore(){ index = savex; }
 
 private:

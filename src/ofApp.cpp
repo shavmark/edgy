@@ -2,11 +2,13 @@
 #include <time.h>
 #include <algorithm>
 
-void LiveArt::snapshot() {
+void LiveArt::snapshot(const string& name) {
 	savex = index;
 	index = -1;
 
-	string filename = "data" + ofToString(savecount++);
+	string filename = "logs\\";
+	filename += name+"\\";
+	filename += ofToString(savecount++);
 	filename += ".dat";
 	ofFile resultsfile(filename);
 	//resultsfile.open(filename, ofFile::WriteOnly);
@@ -126,9 +128,15 @@ bool Image::dedupe(ofColor color, int rangeR, int rangeG, int rangeB) {
 	}
 	return false;
 }
+Image::Image(const string& filename) { 
+	logDir += filename + string(".data.dat");
+	name = ofToDataPath(string("\\images\\") + filename, true); 	
+	warm = ofColor::lightYellow;
+	shortname = filename;
+}
 
 void Image::readColors() {
-	ofFile resultsfile(name + string(".data.dat"));
+	ofFile resultsfile(logDir);
 
 	shapes.clear();
 
@@ -146,7 +154,7 @@ void Image::readColors() {
 	}
 	else {
 		// create it	
-		resultsfile.open(name + string(".data.dat"), ofFile::WriteOnly);
+		resultsfile.open(logDir, ofFile::WriteOnly);
 		vector<ofColor> dat;
 		for (int w = 0; w < img.getWidth(); w += 1) {
 			for (int h = 0; h < img.getHeight(); h += 1) {
@@ -188,7 +196,6 @@ void LiveArt::setMenu(ofxPanel &gui) {
 	gui.setup(realtime, "setup", 1000, 0);
 
 	ofParameterGroup settings;
-	gui.add(settings);
 
 	settings.add(threshold.set("Threshold", 5, 0.0, 255.0));
 
@@ -203,6 +210,7 @@ void LiveArt::setMenu(ofxPanel &gui) {
 	settings.add(sigmaColor.set("sigmaColor", 80, 0.0, 255.0));
 	settings.add(sigmaSpace.set("sigmaSpace", 80, 0.0, 255.0));
 	settings.add(currentImageName.set("currentImageName"));
+	
 
 }
 bool LiveArt::loadAndFilter(Image& image) {
@@ -220,7 +228,6 @@ bool LiveArt::loadAndFilter(Image& image) {
 }
 int LiveArt::getImages() {
 	ofDirectory dir("images");
-	dir.allowExt("jpg"); //jpg only right now but many other types be added
 	dir.listDir();
 	images.clear();
 	for (auto& itr = dir.begin(); itr != dir.end(); ++itr) {
@@ -251,7 +258,7 @@ void LiveArt::setup() {
 
 	// read in all the images the user may want to see
 	for (auto& itr = images.begin(); itr != images.end(); ++itr) {
-		currentImageName = itr->name;
+		currentImageName = itr->shortname;
 		itr->readColors();
 		itr->drawingData.clear();
 		// less colors, do not draw on top of each other, find holes
@@ -303,8 +310,9 @@ void LiveArt::draw() {
 		if (index < images[currentImage].drawingData.size()) {
 			ofPushStyle();
 			// less colors, do not draw on top of each other, find holes
-			ofSetColor(images[currentImage].drawingData[index].color); // varibles here include only show large, or smalll, to create different pictures
-			savedcolors.push_back(images[currentImage].drawingData[index].color);
+			targetColor = images[currentImage].drawingData[index].color;
+			ofSetColor(targetColor); // varibles here include only show large, or smalll, to create different pictures
+			savedcolors.push_back(targetColor);
 			echo(images[currentImage].drawingData[index].lines);
 			ofPopStyle();
 		}
@@ -376,7 +384,7 @@ void ofApp::keyPressed(int key) {
 			art.restore();
 		}
 		else {
-			art.snapshot();
+			art.snapshot(art.images[art.currentImage].name);
 		}
 	}
 	else if (key == 'i') {
@@ -385,6 +393,9 @@ void ofApp::keyPressed(int key) {
 			art.currentImage = 0;
 		}
 		art.index = 0;
+	}
+	else if (key == 'r') {
+		art.setup();
 	}
 	else if (key == 's') {
 		art.index = 0; // go from start
