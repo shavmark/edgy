@@ -363,7 +363,7 @@ void Image::filter(int id, ofParameter<int> a, ofParameter<double> b, ofParamete
 		//cv::bilateralFilter(toCv(img), mat, a, b, c);
 		//toOf(mat, img); // keep both around, use where it makes the most sense
 		for (int i = 0; i < 2; ++i)	{
-			bilateralFilter(src, mat, a, b, c);
+			bilateralFilter(src, mat, a.get(), b.get(), c.get());
 		}
 		toOf(mat, img);
 		break;
@@ -380,11 +380,7 @@ bool LiveArt::loadAndFilter(shared_ptr<Image>image) {
 	if (image) {
 		if (image->img.load(image->name)) {
 			image->img.resize(xImage, yImage);
-			Mat src = toCv(image->img);
-			image->mat = src.clone();
-			bilateralFilter(src, image->mat, d, sigmaColor, sigmaSpace);
-			toOf(image->mat, image->img);
-			//image->filter(0, d, sigmaColor, sigmaSpace);
+			image->filter(0, d, sigmaColor, sigmaSpace);
 		}
 		return true;
 	}
@@ -524,6 +520,9 @@ void LiveArt::draw() {
 	ofPopStyle();
 }
 void LiveArt::echo(vector<ofPolyline>&lines) {
+
+	if (lines.size() == 0)
+		return;
 
 	// use this? fillPoly in wrappers.h
 
