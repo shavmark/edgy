@@ -56,6 +56,7 @@ public:
 	ofParameter<float> threshold;
 private:
 	static void rgb2ryb(unsigned char &r, unsigned char g, unsigned char &b, unsigned char&y);
+	Shapes shapes; // hash for quick lookup
 
 };
 
@@ -66,12 +67,12 @@ public:
 	void update();
 	void draw();
 
-	bool LiveArt::loadAndFilter(Image& image);
+	bool LiveArt::loadAndFilter(shared_ptr<Image> image);
 	void setMenu(ofxPanel &gui);
 	void echo(vector<ofPolyline>&lines);
 	void setTargetColor(const ofColor&c);
 	static void toFile(ofFile& resultsfile, vector<std::pair<ofColor, int>>&dat);
-	static void toFile(ofFile& resultsfile, vector<ofColor>&dat, bool clear);
+	static void toFile(ofFile& resultsfile, vector<colorData> &dat, bool clear);
 	static void fromFile(ofFile& resultsfile, vector<ofColor> &dat);
 	void advanceImage();
 	void haveBeenNotifiedFloat(float &f);
@@ -110,7 +111,6 @@ public:
 	void restore(){ index = savex; }
 
 private:
-	vector<ofColor> savedcolors; //bugbug make unique, right now will store dupes
 	int savex = 0;
 	int savecount = 0;
 	int getImages();

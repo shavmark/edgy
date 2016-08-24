@@ -2,6 +2,7 @@
 #include <time.h>
 #include <algorithm>
 
+//bugbug remove this
 void LiveArt::snapshot(const string& name) {
 	savex = index;
 	index = -1;
@@ -11,10 +12,7 @@ void LiveArt::snapshot(const string& name) {
 	filename += ofToString(savecount++);
 	filename += ".dat";
 	ofFile resultsfile(filename);
-	//resultsfile.open(filename, ofFile::WriteOnly);
-	toFile(resultsfile, savedcolors, true);
 	//resultsfile.close();
-	savedcolors.clear();
 }
 void LiveArt::setTargetColor(const ofColor&c) {
 	targetColor = c;
@@ -99,7 +97,7 @@ void LiveArt::toFile(ofFile& resultsfile, vector<std::pair<ofColor, int>>&dat) {
 
 	resultsfile.close();
 }
-void LiveArt::toFile(ofFile& resultsfile, vector<ofColor>&dat, bool clear) {
+void LiveArt::toFile(ofFile& resultsfile, vector<colorData>&dat, bool clear) {
 
 	if (clear) {
 		resultsfile.clear();
@@ -107,7 +105,7 @@ void LiveArt::toFile(ofFile& resultsfile, vector<ofColor>&dat, bool clear) {
 	ofBuffer buffer;
 	buffer.allocate(dat.size());
 	for (auto itr = dat.begin(); itr != dat.end(); ++itr) {
-		buffer.append(ofToString(itr->getHex()) + "\n");
+		buffer.append(ofToString(itr->color.getHex()) + "\n");
 	}
 	resultsfile.writeFromBuffer(buffer);
 	resultsfile.close();
@@ -206,10 +204,9 @@ Image::Image(string& filename) {
 
 void Image::readColors() {
 	ofFile resultsfile(logDir);
-	Shapes shapes;
 
 	if (resultsfile.exists()) {
-		// use it
+		// using a file, hash not needed as all data is just loaded in
 		ofLog() << "use data" << logDir << endl;
 		ofBuffer buffer = ofBufferFromFile(logDir);
 		for (auto line : buffer.getLines()) {
@@ -219,8 +216,7 @@ void Image::readColors() {
 			}
 			colorData data; // each line is a hex
 			data.color.setHex(ofToInt(line));//bugbug alpha ignored
-			shapes.insert(make_pair(data.color.getHex(), data));
-
+			drawingData.push_back(data);// will be sorted later in this function //bugbug go to shared pointer?
 			if (!data.isCool() && data.color.getBrightness() > 200) {
 				warm = data.color;// go with most recent
 			}
@@ -251,16 +247,16 @@ void Image::readColors() {
 					found = dedupe(data.color, shrinkby, shrinkby, shrinkby);
 				}
 				if (found) {
-					dat.push_back(data.color);
+					drawingData.push_back(data);
 				}
 				//bugbug make a mid brightness
 			}
 		}
 		resultsfile.open(logDir, ofFile::WriteOnly);
-		LiveArt::toFile(resultsfile, dat, true);
+		LiveArt::toFile(resultsfile, drawingData, true);
 	}
 	
-	sort(shapes.begin(), shapes.end(), [=](colorData&  a, colorData&  b) {
+	sort(drawingData.begin(), drawingData.end(), [=](colorData&  a, colorData&  b) {
 		switch (sortby) {
 		case 0:
 			return a.color.getSaturation() > a.color.getSaturation();//bugbug this bug works!!
@@ -357,39 +353,43 @@ void LiveArt::setMenu(ofxPanel &gui) {
 }
 void Image::filter(int id, ofParameter<int> a, ofParameter<double> b, ofParameter<double> c){
 #define MAX_KERNEL_LENGTH 31
-	Mat src; Mat dst;
-	src = toCv(img);
-	dst = src.clone();
+
 	//http://docs.opencv.org/2.4/doc/tutorials/imgproc/gausian_median_blur_bilateral_filter/gausian_median_blur_bilateral_filter.html
 	//bugbug get the canny ones here too
+	Mat src = toCv(img);
+	mat = src.clone();
 	switch (id) {
 	case 0:
 		//cv::bilateralFilter(toCv(img), mat, a, b, c);
 		//toOf(mat, img); // keep both around, use where it makes the most sense
-		for (int i = 0; i < 1; ++i)	{
-			bilateralFilter(src, dst, a, b, c);
+		for (int i = 0; i < 2; ++i)	{
+			bilateralFilter(src, mat, a, b, c);
 		}
-		mat = dst.clone();
 		toOf(mat, img);
 		break;
 	case 1:
 		for (int i = 1; i < MAX_KERNEL_LENGTH; i = i + 2) {
-			GaussianBlur(src, dst, Size(i, i), 0, 0);
+			GaussianBlur(src, mat, Size(i, i), 0, 0);
 		}
-		mat = dst.clone();
 		toOf(mat, img);
 		break;
 	}
 }
-bool LiveArt::loadAndFilter(Image& image) {
+bool LiveArt::loadAndFilter(shared_ptr<Image>image) {
 	
-	if (!image.img.load(image.name)) {
-		ofLogError() << image.name << " not loaded";
-		return false;
+	if (image) {
+		if (image->img.load(image->name)) {
+			image->img.resize(xImage, yImage);
+			Mat src = toCv(image->img);
+			image->mat = src.clone();
+			bilateralFilter(src, image->mat, d, sigmaColor, sigmaSpace);
+			toOf(image->mat, image->img);
+			//image->filter(0, d, sigmaColor, sigmaSpace);
+		}
+		return true;
 	}
-	image.img.resize(xImage, yImage);
-	image.filter(0, d, sigmaColor, sigmaSpace);
-	return true;
+	ofLogError() << image->name << " not loaded";
+	return false;
 }
 int LiveArt::getImages() {
 	ofDirectory dir("images");
@@ -397,7 +397,7 @@ int LiveArt::getImages() {
 	images.clear();
 	for (auto& itr = dir.begin(); itr != dir.end(); ++itr) {
 		shared_ptr<Image> image = make_shared<Image>(itr->getFileName());
-		if (image == nullptr || !loadAndFilter(*image)) {
+		if (image == nullptr || !loadAndFilter(image)) {
 			ofLogError() << itr->getFileName() << " not loaded";
 			continue;
 		} 
@@ -430,19 +430,16 @@ void Image::MyThread::threadedFunction() {
 			ofLog() << image->name << "start" << endl;
 			image->readColors(); // bugbug read all in, in the future only read in what is shown
 			image->readIn = true;
-			image->drawingData.clear();
 			// less colors, do not draw on top of each other, find holes
-			for (auto& itr2 = image->shapes.begin(); itr2 != image->shapes.end(); ++itr2) {
+			for (int i = 0; i < image->drawingData.size(); ++i) {
 				// bugbug install backup software
 				// put all results in a vector of PolyLines, then sort by size, then draw, save polylines in a file
-				finder.setTargetColor(itr2->second.color, TRACK_COLOR_RGB);
-
+				finder.setTargetColor(image->drawingData[i].color, TRACK_COLOR_RGB);
 				finder.findContours(image->mat);
 				if (finder.getPolylines().size() > 1) {
-					itr2->second.lines = finder.getPolylines();
-					itr2->second.threshold = image->threshold;
-					add(&itr2->second); // only data that can be used outside of thread while thread is running
-					image->drawingData.push_back(itr2->second); // shadow vector for good sorting
+					image->drawingData[i].lines = finder.getPolylines();
+					image->drawingData[i].threshold = image->threshold;
+					add(&image->drawingData[i]); // only data that can be used outside of thread while thread is running
 				}
 			}
 		}
@@ -487,7 +484,7 @@ void LiveArt::setup() {
 }
 
 void LiveArt::update() {
-	count = images[currentImage]->shapes.size();
+	count = images[currentImage]->drawingData.size();
 }
 void LiveArt::draw() {
 
@@ -516,7 +513,6 @@ void LiveArt::draw() {
 																	// less colors, do not draw on top of each other, find holes
 				setTargetColor(images[currentImage]->drawingData[index].color);
 				ofSetColor(targetColor); // varibles here include only show large, or smalll, to create different pictures
-				savedcolors.push_back(targetColor);
 				echo(images[currentImage]->drawingData[index].lines);
 			}
 			++index;
