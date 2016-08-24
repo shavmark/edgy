@@ -262,16 +262,16 @@ void Image::readColors() {
 	}
 }
 void LiveArt::haveBeenNotifiedFloat(float &f) {
-	ofLog() << " event at " << f << endl;
+	images[currentImage].readIn = false;// get more data
 }
 void LiveArt::haveBeenNotifiedInt(int &i) {
-	ofLog() << " event at " << i << endl;
+	images[currentImage].readIn = false;// get more data
 }
 void LiveArt::haveBeenNotifiedBool(bool &b) {
 	ofLog() << " event at " << b << endl;
 }
 void LiveArt::haveBeenNotifiedDouble(double &d) {
-	ofLog() << " event at " << d << endl;
+	images[currentImage].readIn = false;// get more data
 }
 void LiveArt::redoButtonPressed() {
 	ofLog() << " event at redo " << endl;
@@ -394,18 +394,18 @@ void LiveArt::setup() {
 		if (!itr->readIn) {
 			itr->readColors(); // bugbug read all in, in the future only read in what is shown
 			itr->readIn = true;
-		}
-		itr->drawingData.clear();
-		// less colors, do not draw on top of each other, find holes
-		for (auto& itr2 = itr->shapes.begin(); itr2 != itr->shapes.end(); ++itr2) {
-			// bugbug install backup software
-			// put all results in a vector of PolyLines, then sort by size, then draw, save polylines in a file
-			finder.setTargetColor(itr2->second.color, TRACK_COLOR_RGB);
-			finder.findContours(itr->img);
-			if (finder.getPolylines().size() > 1) {
-				itr2->second.lines = finder.getPolylines();
-				itr2->second.threshold = threshold;
-				itr->drawingData.push_back(itr2->second); // shadow vector for good sorting
+			itr->drawingData.clear();
+			// less colors, do not draw on top of each other, find holes
+			for (auto& itr2 = itr->shapes.begin(); itr2 != itr->shapes.end(); ++itr2) {
+				// bugbug install backup software
+				// put all results in a vector of PolyLines, then sort by size, then draw, save polylines in a file
+				finder.setTargetColor(itr2->second.color, TRACK_COLOR_RGB);
+				finder.findContours(itr->img);
+				if (finder.getPolylines().size() > 1) {
+					itr2->second.lines = finder.getPolylines();
+					itr2->second.threshold = threshold;
+					itr->drawingData.push_back(itr2->second); // shadow vector for good sorting
+				}
 			}
 		}
 		ofLog() << "sort " << itr->shortname << endl;
@@ -489,7 +489,16 @@ void LiveArt::echo(vector<ofPolyline>&lines) {
 		line.draw();
 	}
 }
-
+void LiveArt::advanceImage()
+{
+	currentImage++;
+	if (currentImage >= images.size()) {
+		currentImage = 0;
+	}
+	index = 0;
+	currentImageName = images[currentImage].shortname;
+	setup();
+}
 void ofApp::setup() {
 	art.setMenu(gui);
 
@@ -539,18 +548,19 @@ void ofApp::keyPressed(int key) {
 			art.snapshot(art.images[art.currentImage].name);
 		}
 	}
-	else if (key == 'i') {
-		art.currentImage++;
-		if (art.currentImage >= art.images.size()) {
-			art.currentImage = 0;
-		}
-		art.index = 0;
+	else if (key == 'a') {
+		art.advanceImage();
 	}
 	else if (key == 'r') {
 		art.setup();
 	}
 	else if (key == 's') {
 		art.index = 0; // go from start
+	}
+	else if (key == 'x') {
+		string name = "save\\";
+		name += art.images[art.currentImage].shortname;
+		art.images[art.currentImage].img.save(name);
 	}
 	else if (key == 'b') {
 		art.index -= 20; // hit b a bunch of times to get back to the start

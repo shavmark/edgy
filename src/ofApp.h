@@ -57,6 +57,7 @@ public:
 	static void toFile(ofFile& resultsfile, vector<std::pair<ofColor, int>>&dat);
 	static void toFile(ofFile& resultsfile, vector<ofColor>&dat, bool clear);
 	static void fromFile(ofFile& resultsfile, vector<ofColor> &dat);
+	void advanceImage();
 	void haveBeenNotifiedFloat(float &f);
 	void haveBeenNotifiedInt(int &i);
 	void haveBeenNotifiedBool(bool &b);
