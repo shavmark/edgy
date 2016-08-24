@@ -197,7 +197,7 @@ bool Image::dedupe(ofColor color, int rangeR, int rangeG, int rangeB) {
 	}
 	return false;
 }
-Image::Image(const string& filename) { 
+Image::Image(string& filename) { 
 	logDir += filename + string(".data.dat");
 	name = ofToDataPath(string("\\images\\") + filename, true); 	
 	warm = ofColor::lightYellow;
@@ -206,8 +206,7 @@ Image::Image(const string& filename) {
 
 void Image::readColors() {
 	ofFile resultsfile(logDir);
-
-	shapes.clear();
+	Shapes shapes;
 
 	if (resultsfile.exists()) {
 		// use it
@@ -260,18 +259,43 @@ void Image::readColors() {
 		resultsfile.open(logDir, ofFile::WriteOnly);
 		LiveArt::toFile(resultsfile, dat, true);
 	}
+	
+	sort(shapes.begin(), shapes.end(), [=](colorData&  a, colorData&  b) {
+		switch (sortby) {
+		case 0:
+			return a.color.getSaturation() > a.color.getSaturation();//bugbug this bug works!!
+		case 1:
+			return a.lines.size() > b.lines.size();
+		case 2:
+			if (a.color.getSaturation() == a.color.getSaturation()) {
+				return a.lines.size() > b.lines.size();
+			}
+			return  a.color.getSaturation() > a.color.getSaturation();
+		case 3:
+			if (a.lines.size() == a.lines.size()) {
+				return a.color.getSaturation() > b.color.getSaturation();
+			}
+			return  a.lines.size() > a.lines.size();
+		case 4:
+			return a.color.getSaturation() > b.color.getSaturation();
+		default:
+			return a.color.getSaturation() > b.color.getSaturation();
+		}
+		//bugbug need to add in sort by size, count, saturation, brightness, object size etc
+	});
+
 }
 void LiveArt::haveBeenNotifiedFloat(float &f) {
-	images[currentImage].readIn = false;// get more data
+	images[currentImage]->readIn = false;// get more data
 }
 void LiveArt::haveBeenNotifiedInt(int &i) {
-	images[currentImage].readIn = false;// get more data
+	images[currentImage]->readIn = false;// get more data
 }
 void LiveArt::haveBeenNotifiedBool(bool &b) {
 	ofLog() << " event at " << b << endl;
 }
 void LiveArt::haveBeenNotifiedDouble(double &d) {
-	images[currentImage].readIn = false;// get more data
+	images[currentImage]->readIn = false;// get more data
 }
 void LiveArt::redoButtonPressed() {
 	ofLog() << " event at redo " << endl;
@@ -331,17 +355,40 @@ void LiveArt::setMenu(ofxPanel &gui) {
 	gui.add(ryb);
 
 }
+void Image::filter(int id, ofParameter<int> a, ofParameter<double> b, ofParameter<double> c){
+#define MAX_KERNEL_LENGTH 31
+	Mat src; Mat dst;
+	src = toCv(img);
+	dst = src.clone();
+	//http://docs.opencv.org/2.4/doc/tutorials/imgproc/gausian_median_blur_bilateral_filter/gausian_median_blur_bilateral_filter.html
+	//bugbug get the canny ones here too
+	switch (id) {
+	case 0:
+		//cv::bilateralFilter(toCv(img), mat, a, b, c);
+		//toOf(mat, img); // keep both around, use where it makes the most sense
+		for (int i = 0; i < 1; ++i)	{
+			bilateralFilter(src, dst, a, b, c);
+		}
+		mat = dst.clone();
+		toOf(mat, img);
+		break;
+	case 1:
+		for (int i = 1; i < MAX_KERNEL_LENGTH; i = i + 2) {
+			GaussianBlur(src, dst, Size(i, i), 0, 0);
+		}
+		mat = dst.clone();
+		toOf(mat, img);
+		break;
+	}
+}
 bool LiveArt::loadAndFilter(Image& image) {
 	
-	image.img.load(image.name);
 	if (!image.img.load(image.name)) {
 		ofLogError() << image.name << " not loaded";
 		return false;
 	}
 	image.img.resize(xImage, yImage);
-	cv::Mat tempMat = toCv(image.img);
-	cv::bilateralFilter(tempMat, image.mat, d, sigmaColor, sigmaSpace);
-	toOf(image.mat, image.img);
+	image.filter(0, d, sigmaColor, sigmaSpace);
 	return true;
 }
 int LiveArt::getImages() {
@@ -349,18 +396,56 @@ int LiveArt::getImages() {
 	dir.listDir();
 	images.clear();
 	for (auto& itr = dir.begin(); itr != dir.end(); ++itr) {
-		Image image(itr->getFileName());
-		if (!loadAndFilter(image)) {
+		shared_ptr<Image> image = make_shared<Image>(itr->getFileName());
+		if (image == nullptr || !loadAndFilter(*image)) {
 			ofLogError() << itr->getFileName() << " not loaded";
 			continue;
 		} 
 		images.push_back(image);
 	}
 	if (images.size() > 0) {
-		currentImageName = images[0].shortname;
+		currentImageName = images[0]->shortname;
 	}
 
 	return images.size();
+}
+void Image::MyThread::add(colorData*data) {
+	lock();
+	current.push(data);
+	unlock();
+}
+colorData* Image::MyThread::get() {
+	colorData*data = nullptr;
+	lock();
+	if (current.size() > 0) {
+		data = current.front();
+		current.pop();
+	}
+	unlock();
+	return data;
+}
+void Image::MyThread::threadedFunction() {
+
+		if (image && !image->readIn) {
+			ofLog() << image->name << "start" << endl;
+			image->readColors(); // bugbug read all in, in the future only read in what is shown
+			image->readIn = true;
+			image->drawingData.clear();
+			// less colors, do not draw on top of each other, find holes
+			for (auto& itr2 = image->shapes.begin(); itr2 != image->shapes.end(); ++itr2) {
+				// bugbug install backup software
+				// put all results in a vector of PolyLines, then sort by size, then draw, save polylines in a file
+				finder.setTargetColor(itr2->second.color, TRACK_COLOR_RGB);
+
+				finder.findContours(image->mat);
+				if (finder.getPolylines().size() > 1) {
+					itr2->second.lines = finder.getPolylines();
+					itr2->second.threshold = image->threshold;
+					add(&itr2->second); // only data that can be used outside of thread while thread is running
+					image->drawingData.push_back(itr2->second); // shadow vector for good sorting
+				}
+			}
+		}
 }
 void LiveArt::setup() {
 	ofLog() << "setup" << endl;
@@ -374,64 +459,25 @@ void LiveArt::setup() {
 		}
 		readIn = true;
 	}
-
-	ContourFinder finder;
-	finder.setMinAreaRadius(minRadius);
-	finder.setMaxAreaRadius(maxRadius);
-	finder.setSimplify(true);
-	finder.setAutoThreshold(false);
-	finder.setThreshold(threshold);
-	finder.setUseTargetColor(true);
-	finder.setFindHoles(findHoles);// matters
-
-	// read in all the images the user may want to see
-	for (auto& itr = images.begin(); itr != images.end(); ++itr) {
-		if (itr->shortname != currentImageName.get()) {
-			ofLog() << "ignore " << itr->name << endl;
+	// find the current image and start its thread to compile contours
+	for (int i = 0; i < images.size(); ++i) {
+		// if current thread is already running, or the current image is not this one, skip this scan
+		if (images[i]->mythread.isThreadRunning() || images[i]->shortname != currentImageName.get()) {
+			ofLog() << "ignore " << images[i]->name << endl;
 			continue;
 		}
-		ofLog() << itr->name << endl;
-		if (!itr->readIn) {
-			itr->readColors(); // bugbug read all in, in the future only read in what is shown
-			itr->readIn = true;
-			itr->drawingData.clear();
-			// less colors, do not draw on top of each other, find holes
-			for (auto& itr2 = itr->shapes.begin(); itr2 != itr->shapes.end(); ++itr2) {
-				// bugbug install backup software
-				// put all results in a vector of PolyLines, then sort by size, then draw, save polylines in a file
-				finder.setTargetColor(itr2->second.color, TRACK_COLOR_RGB);
-				finder.findContours(itr->img);
-				if (finder.getPolylines().size() > 1) {
-					itr2->second.lines = finder.getPolylines();
-					itr2->second.threshold = threshold;
-					itr->drawingData.push_back(itr2->second); // shadow vector for good sorting
-				}
-			}
-		}
-		ofLog() << "sort " << itr->shortname << endl;
-		sort(itr->drawingData.begin(), itr->drawingData.end(), [=](colorData&  a, colorData&  b) {
-			switch (sortby) {
-			case 0:
-				return a.color.getSaturation() > a.color.getSaturation();//bugbug this bug works!!
-			case 1:
-				return a.lines.size() > b.lines.size();
-			case 2:
-				if (a.color.getSaturation() == a.color.getSaturation()) {
-					return a.lines.size() > b.lines.size();
-				}
-				return  a.color.getSaturation() > a.color.getSaturation();
-			case 3:
-				if (a.lines.size() == a.lines.size()) {
-					return a.color.getSaturation() > b.color.getSaturation();
-				}
-				return  a.lines.size() > a.lines.size();
-			case 4:
-				return a.color.getSaturation() > b.color.getSaturation();
-			default:
-				return a.color.getSaturation() > b.color.getSaturation();
-			}
-			//bugbug need to add in sort by size, count, saturation, brightness, object size etc
-		});
+
+		images[i]->mythread.finder.setMinAreaRadius(minRadius);
+		images[i]->mythread.finder.setMaxAreaRadius(maxRadius);
+		images[i]->mythread.finder.setSimplify(true);
+		images[i]->mythread.finder.setAutoThreshold(false);
+		images[i]->mythread.finder.setThreshold(threshold);
+		images[i]->mythread.finder.setUseTargetColor(true);
+		images[i]->mythread.finder.setFindHoles(findHoles);// matters
+		images[i]->threshold = threshold;
+		images[i]->sortby = sortby;
+		images[i]->mythread.image = images[i];
+		images[i]->mythread.startThread();
 	}
 
 
@@ -441,38 +487,45 @@ void LiveArt::setup() {
 }
 
 void LiveArt::update() {
-	count = images[currentImage].shapes.size();
+	count = images[currentImage]->shapes.size();
 }
 void LiveArt::draw() {
 
-	ofSetBackgroundColor(ofColor::white);
-	images[currentImage].img.draw(0, 0);// test with 2000,2000 image
 
 	ofSetColor(ofColor::white);
-	ofSetBackgroundColor(images[currentImage].warm);//bugbug use lightest found color
+	images[currentImage]->img.draw(0, 0);
 
 	ofSetLineWidth(1);
-	
+
 	//ofTranslate(300, 0); keep as a reminder
 
-	int s = images[currentImage].drawingData.size();
-
-	if (index > -1 && images[currentImage].drawingData.size() > 0) {
-		if (index < images[currentImage].drawingData.size()) {
-			currentImageName = images[currentImage].shortname;
-			ofPushStyle();
-			// less colors, do not draw on top of each other, find holes
-			setTargetColor(images[currentImage].drawingData[index].color);
-			ofSetColor(targetColor); // varibles here include only show large, or smalll, to create different pictures
-			savedcolors.push_back(targetColor);
-			echo(images[currentImage].drawingData[index].lines);
-			ofPopStyle();
-		}
-		++index;
-		if (index >= images[currentImage].drawingData.size()) {
-			index = -1; // stop
+	// thread is building data so only show current item
+	colorData *p;
+	ofPushStyle();
+	if (images[currentImage]->mythread.isThreadRunning() && (p = images[currentImage]->mythread.get())) {
+		setTargetColor(p->color);
+		ofSetColor(p->color);
+		echo(p->lines);
+		++index; // show progress
+	}
+	else {
+		if (index > -1 && images[currentImage]->drawingData.size() > 0) {
+			currentImageName = images[currentImage]->shortname;
+			if (index < images[currentImage]->drawingData.size()) {
+				ofSetBackgroundColor(images[currentImage]->warm);//bugbug use lightest found color
+																	// less colors, do not draw on top of each other, find holes
+				setTargetColor(images[currentImage]->drawingData[index].color);
+				ofSetColor(targetColor); // varibles here include only show large, or smalll, to create different pictures
+				savedcolors.push_back(targetColor);
+				echo(images[currentImage]->drawingData[index].lines);
+			}
+			++index;
+			if (index >= images[currentImage]->drawingData.size()) {
+				index = -1; // stop
+			}
 		}
 	}
+	ofPopStyle();
 }
 void LiveArt::echo(vector<ofPolyline>&lines) {
 
@@ -496,7 +549,7 @@ void LiveArt::advanceImage()
 		currentImage = 0;
 	}
 	index = 0;
-	currentImageName = images[currentImage].shortname;
+	currentImageName = images[currentImage]->shortname;
 	setup();
 }
 void ofApp::setup() {
@@ -545,7 +598,7 @@ void ofApp::keyPressed(int key) {
 			art.restore();
 		}
 		else {
-			art.snapshot(art.images[art.currentImage].name);
+			art.snapshot(art.images[art.currentImage]->name);
 		}
 	}
 	else if (key == 'a') {
@@ -559,8 +612,8 @@ void ofApp::keyPressed(int key) {
 	}
 	else if (key == 'x') {
 		string name = "save\\";
-		name += art.images[art.currentImage].shortname;
-		art.images[art.currentImage].img.save(name);
+		name += art.images[art.currentImage]->shortname;
+		art.images[art.currentImage]->img.save(name);
 	}
 	else if (key == 'b') {
 		art.index -= 20; // hit b a bunch of times to get back to the start
@@ -571,8 +624,8 @@ void ofApp::keyPressed(int key) {
 }
 void ofApp::mousePressed(int x, int y, int button) {
 
-	if (x < art.images[art.currentImage].img.getWidth() && y < art.images[art.currentImage].img.getHeight()) {
-		art.setTargetColor(art.images[art.currentImage].img.getColor(x, y)); //bugbug make it scan just for this in the future
+	if (x < art.images[art.currentImage]->img.getWidth() && y < art.images[art.currentImage]->img.getHeight()) {
+		art.setTargetColor(art.images[art.currentImage]->img.getColor(x, y)); //bugbug make it scan just for this in the future
 	}
 
 }

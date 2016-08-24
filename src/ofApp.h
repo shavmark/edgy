@@ -5,8 +5,11 @@
 #include "ofxGui.h"
 #include <unordered_map>
 #include <unordered_set>
+#include <queue>
+
 using namespace ofxCv;
 using namespace cv;
+
 
 class colorData {
 public:
@@ -21,16 +24,26 @@ public:
 typedef map<int, colorData> Shapes;
 class Image {
 public:
-	Image(const string& filename);
+	Image(string& filename);
+	class MyThread : public ofThread {
+	public:
+		ContourFinder finder;
+		shared_ptr<Image>image;
+		colorData* get();
+	private:
+		queue<colorData*> current;
+		void add(colorData*);
+		void threadedFunction();
+	};
 
 	bool findOrAdd(const ofColor&color, bool add);
 	bool testForExistance(ofColor color, int i, int j, int k);// test for existance
 	bool dedupe(ofColor color, int rangeR, int rangeG, int rangeB);
 	void readColors();
 	static void rgbToryb(const ofColor& in, ofParameter<ofColor>& red, ofParameter<ofColor>& yellow, ofParameter<ofColor>& blue);
+	void filter(int id, ofParameter<int> a, ofParameter<double> b, ofParameter<double> c);
 	string name;
 	string shortname;
-	Shapes shapes;
 	vector<colorData> drawingData;
 	ofImage img;//both images stored for Convenience  of the progammer
 	cv::Mat mat;
@@ -38,6 +51,9 @@ public:
 	ofParameter<int> shrinkby = 3;
 	string logDir="logs\\";
 	bool readIn = false;
+	MyThread mythread;
+	ofParameter<int>sortby=0;
+	ofParameter<float> threshold;
 private:
 	static void rgb2ryb(unsigned char &r, unsigned char g, unsigned char &b, unsigned char&y);
 
@@ -81,12 +97,13 @@ public:
 	ofParameter<int> index;
 	ofParameter<ofColor>targetColor;
 	ofxButton redo;
+	ofxButton cancel;
 	ofParameter<ofColor>red;
 	ofParameter<ofColor>yellow;
 	ofParameter<ofColor>blue;
 
 	ofParameter<int> currentImage = 0;
-	vector<Image> images;
+	vector<shared_ptr<Image>> images;
 	ofParameter<int> sortby=0;
 
 	void snapshot(const string& name);
