@@ -24,18 +24,23 @@ public:
 private:
 };
 typedef map<int, colorData> Shapes;
+class myContourFinder : public ContourFinder {
+public:
+};
 class Image {
 public:
 	Image(string& filename);
 	class MyThread : public ofThread {
 	public:
-		ContourFinder finder;
+		myContourFinder finder;
 		shared_ptr<Image>image;
+		colorData get();
+		queue<colorData> tracedata;
 	private:
 		void threadedFunction();
 	};
 	int index = 0;
-
+	int hits = 0;
 	bool findOrAdd(const ofColor&color, bool add);
 	bool testForExistance(ofColor color, int i, int j, int k);// test for existance
 	bool dedupe(ofColor color, int rangeR, int rangeG, int rangeB);
@@ -55,7 +60,6 @@ public:
 	MyThread mythread;
 	ofParameter<int>sortby=0;
 	ofParameter<float> threshold;
-	bool found = false;
 	int allcolors = 0;
 private:
 	static void rgb2ryb(unsigned char &r, unsigned char g, unsigned char &b, unsigned char&y);
@@ -100,7 +104,6 @@ public:
 	ofParameter<string>currentImageName;
 	ofParameter<float> threshold;
 	ofParameter<int> count;
-	ofParameter<int> currentIndex;
 	ofParameter<ofColor>targetColor;
 	ofxButton redo;
 	ofxButton cancel;
@@ -113,10 +116,8 @@ public:
 	ofParameter<int> sortby=0;
 
 	void snapshot(const string& name);
-	void restore(){ currentIndex = savex; }
 
 private:
-	int savex = 0;
 	int savecount = 0;
 	int getImages();
 	bool readIn = false;

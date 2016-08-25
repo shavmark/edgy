@@ -4,9 +4,6 @@
 
 //bugbug remove this
 void LiveArt::snapshot(const string& name) {
-	savex = currentIndex;
-	currentIndex = -1;
-
 	string filename = "logs\\";
 	filename += name+"\\";
 	filename += ofToString(savecount++);
@@ -211,7 +208,7 @@ bool Image::dedupe(ofColor color, int rangeR, int rangeG, int rangeB) {
 Image::Image(string& filename) { 
 	logDir += filename + string(".data.dat");
 	name = ofToDataPath(string("\\images\\") + filename, true); 	
-	warm = ofColor::lightYellow;
+	warm = ofColor::black;
 	shortname = filename;
 }
 
@@ -230,7 +227,8 @@ void Image::readColors() {
 			colorData data; // each line is a hex
 			data.color.setHex(ofToInt(line));//bugbug alpha ignored
 			drawingData.push_back(data);// will be sorted later in this function //bugbug go to shared pointer?
-			if (!data.isCool() && data.color.getBrightness() > 200) {
+			//(0.299*R + 0.587*G + 0.114*B)
+			if (warm.get().getBrightness() < data.color.getBrightness() && !data.isCool()) {
 				warm = data.color;// go with most recent
 			}
 		}
@@ -249,7 +247,7 @@ void Image::readColors() {
 				//if (color.r == 255 && color.g == 255 && color.b == 255) {
 				//continue; //ignore white need this to be the back ground color
 				//}
-				if (!data.isCool() && data.color.getBrightness() > 200) {
+				if (warm.get().getBrightness() < data.color.getBrightness()) {
 					warm = data.color;// go with most recent
 				}
 				if (data.color.getBrightness() > 255) { // ignore the super bright stuff
@@ -271,7 +269,10 @@ void Image::readColors() {
 	sort(drawingData.begin(), drawingData.end(), [=](colorData&  a, colorData&  b) {
 		switch (sortby) {
 		case 0:
-			return a.color.getSaturation() > b.color.getSaturation();
+			if (a.color.getSaturation() == b.color.getSaturation()) {
+				return a.color.getSaturation() < b.color.getSaturation();
+			}
+			return a.color.getBrightness() < b.color.getBrightness();
 		case 1:
 			return a.lines.size() > b.lines.size();
 		case 2:
@@ -287,7 +288,7 @@ void Image::readColors() {
 		case 4:
 			return a.color.getSaturation() > b.color.getSaturation();
 		default:
-			return a.color.getSaturation() > b.color.getSaturation();
+			return a.color.getSaturation() < b.color.getSaturation();
 		}
 		//bugbug need to add in sort by size, count, saturation, brightness, object size etc
 	});
@@ -307,6 +308,7 @@ void LiveArt::haveBeenNotifiedDouble(double &d) {
 }
 void LiveArt::redoButtonPressed() {
 	ofLog() << " event at redo " << endl;
+	images[currentImage]->index = 0;
 	setup();
 }
 
@@ -320,21 +322,20 @@ void LiveArt::setMenu(ofxPanel &gui) {
 	realtime.add(allColors.set("all colors", 0));
 	
 	realtime.add(count.set("used count", 0));
-	realtime.add(currentIndex.set("current", 0));
-	gui.setup(realtime, "setup", 1000, 0);
+	gui.setup(realtime, "setup", 700 *2, 0);
 
 	ofParameterGroup settings;
 	settings.setName("settings");
 
-	settings.add(threshold.set("Threshold", 15, 0.0, 255.0));
+	settings.add(threshold.set("Threshold", 5, 1.0, 255.0));
 
 	settings.add(minRadius.set("minRadius", 1, 0.0, 255.0));
 	settings.add(maxRadius.set("maxRadius", 150, 0.0, 255.0));
 	settings.add(findHoles.set("findHoles", true));
 	settings.add(smoothingSize.set("smoothingSize", 2, 0.0, 255.0));
 	settings.add(smoothingShape.set("smoothingShape", 0.0, 0.0, 255.0));
-	settings.add(xImage.set("xImage", 500,20, 4000.0));
-	settings.add(yImage.set("yImage", 500,20, 4000.0));
+	settings.add(xImage.set("xImage", 700,20, 4000.0));
+	settings.add(yImage.set("yImage", 700,20, 4000.0));
 	settings.add(d.set("d", 15, 0.0, 255.0));
 	settings.add(sigmaColor.set("sigmaColor", 80, 0.0, 255.0));
 	settings.add(sigmaSpace.set("sigmaSpace", 80, 0.0, 255.0));
@@ -419,6 +420,16 @@ int LiveArt::getImages() {
 
 	return images.size();
 }
+colorData Image::MyThread::get() {
+	colorData data;
+	lock();
+	if (!tracedata.empty()) {
+		data = tracedata.front();
+		tracedata.pop();
+	}
+	unlock();
+	return data;
+}
 void Image::MyThread::threadedFunction() {
 
 	if (image && !image->readIn) {
@@ -432,40 +443,23 @@ void Image::MyThread::threadedFunction() {
 		// less colors, do not draw on top of each other, find holes
 		for (auto& itr = image->drawingData.begin(); itr != image->drawingData.end(); ){
 			// put all results in a vector of PolyLines, then sort by size, then draw, save polylines in a file
-			lock();
 			finder.setTargetColor(itr->color, TRACK_COLOR_RGB);
 			finder.findContours(image->mat);
 			if (finder.getPolylines().size() > 0) {
 				itr->lines = finder.getPolylines();
 				itr->threshold = image->threshold;
-				image->found = true;
-				++itr;
+				lock();
+				tracedata.push(*itr);
+				unlock();
+				++image->hits;
+				
 			}
-			else {
-				// remove unused items
-				image->ignoredData.push_back(*itr);
-				itr = image->drawingData.erase(itr);
-			}
-			unlock();
+			++itr;
 		}
-		ofFile resultsfile; // save in a file, too much data show -- but the data is key as it shows what is ignored per given rules
-		sort(image->ignoredData.begin(), image->ignoredData.end(), [=](colorData&  a, colorData&  b) {
-			if (a.color.r == b.color.r) {
-				if (a.color.g == b.color.g) {
-					return a.color.b > b.color.b;
-				}
-				return a.color.g > b.color.g;
-			}
-			return a.color.r > b.color.r;
-	
-		});
-		resultsfile.open(image->logDir+ofToString(".notused.dat"), ofFile::WriteOnly);
-		LiveArt::toFileHumanForm(resultsfile, image->ignoredData, true);
 	}
 }
 void LiveArt::setup() {
 	ofLog() << "setup" << endl;
-	currentIndex = 0;
 
 	if (!readIn) {
 		if (!getImages()) {
@@ -501,7 +495,41 @@ void LiveArt::setup() {
 }
 
 void LiveArt::update() {
-	count = images[currentImage]->drawingData.size();
+	// remove unused data
+	if (!images[currentImage]->mythread.isThreadRunning()) {
+		// only do this once somethings is found
+		if (images[currentImage]->hits > 0) {
+			for (auto& itr = images[currentImage]->drawingData.begin(); itr != images[currentImage]->drawingData.end(); ) {
+				// put all results in a vector of PolyLines, then sort by size, then draw, save polylines in a file
+				if (itr->lines.size() == 0) {
+					// remove unused items
+					images[currentImage]->ignoredData.push_back(*itr);
+					itr = images[currentImage]->drawingData.erase(itr);
+				}
+				else {
+					++itr;
+				}
+			}
+			ofFile resultsfile; // save in a file, too much data show -- but the data is key as it shows what is ignored per given rules
+			sort(images[currentImage]->ignoredData.begin(), images[currentImage]->ignoredData.end(), [=](colorData&  a, colorData&  b) {
+				if (a.color.r == b.color.r) {
+					if (a.color.g == b.color.g) {
+						return a.color.b > b.color.b;
+					}
+					return a.color.g > b.color.g;
+				}
+				return a.color.r > b.color.r;
+
+			});
+			resultsfile.open(images[currentImage]->logDir + ofToString(".notused.dat"), ofFile::WriteOnly);
+			LiveArt::toFileHumanForm(resultsfile, images[currentImage]->ignoredData, true);
+			images[currentImage]->hits = 0; // data no longer fresh
+			images[currentImage]->index = -1;
+		}
+	}
+	else {
+		count = images[currentImage]->hits;
+	}
 }
 void LiveArt::draw() {
 
@@ -519,23 +547,36 @@ void LiveArt::draw() {
 	ofSetColor(ofColor::white);
 	images[currentImage]->img.draw(0, 0);
 	ofSetLineWidth(1);
-
+	int i = images[currentImage]->index;// for debug
 	if (images[currentImage]->mythread.isThreadRunning()) {
-		if (images[currentImage]->found) {
+		colorData data = images[currentImage]->mythread.get();
+		if (data.lines.size() > 0) {
 			// thread that popuplates this data will delete unused items so the list is always changing
-			// just echo the first one found
-			for (; images[currentImage]->index < images[currentImage]->drawingData.size();) {
-				if (images[currentImage]->drawingData[images[currentImage]->index].lines.size() > 0) {
-					setTargetColor(images[currentImage]->drawingData[images[currentImage]->index].color);
-					ofSetColor(images[currentImage]->drawingData[images[currentImage]->index].color);
-					echo(images[currentImage]->drawingData[images[currentImage]->index].lines);
-					++images[currentImage]->index;
-					break;
-				}
-			}
+			// just echo the first one found to show all data
+			ofColor c = images[currentImage]->warm;
+			ofSetBackgroundColor(images[currentImage]->warm);
+			setTargetColor(data.color);
+			ofSetColor(data.color);
+			echo(data.lines);
 		}
 	}
 	else {
+		// clean out any remaining data
+		do {
+			colorData data = images[currentImage]->mythread.get();
+			if (data.lines.size() > 0) {
+				// thread that popuplates this data will delete unused items so the list is always changing
+				// just echo the first one found to show all data
+				ofSetBackgroundColor(images[currentImage]->warm);
+				setTargetColor(data.color);
+				ofSetColor(data.color);
+				echo(data.lines);
+			}
+			else {
+				break;
+			}
+		} while (1);
+
 		currentImageName = images[currentImage]->shortname;
 		int i = images[currentImage]->index;
 		int s = images[currentImage]->drawingData.size();
@@ -550,8 +591,8 @@ void LiveArt::draw() {
 			echo(images[currentImage]->drawingData[images[currentImage]->index].lines);
 			++images[currentImage]->index;
 		}
+		count = images[currentImage]->index;
 	}
-	currentIndex = images[currentImage]->index;
 	allColors = images[currentImage]->allcolors;
 	ofPopStyle();
 }
@@ -627,12 +668,7 @@ void ofApp::draw() {
 }
 void ofApp::keyPressed(int key) {
 	if (key == ' ') {
-		if (art.images[art.currentImage]->index == -1) {
-			art.restore();
-		}
-		else {
-			art.snapshot(art.images[art.currentImage]->name);
-		}
+		// put a start/stop here
 	}
 	else if (key == 'a') {
 		art.advanceImage();
