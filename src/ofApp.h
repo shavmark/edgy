@@ -51,6 +51,7 @@ public:
 	string shortname;
 	vector<colorData> drawingData;
 	vector<colorData> ignoredData;
+	int lineThreshHold = 2;
 	ofImage img;//both images stored for Convenience  of the progammer
 	cv::Mat mat;
 	ofParameter<ofColor>warm;
@@ -76,7 +77,7 @@ public:
 
 	bool LiveArt::loadAndFilter(shared_ptr<Image> image);
 	void setMenu(ofxPanel &gui);
-	void echo(vector<ofPolyline>&lines);
+	void echo(const vector<ofPolyline>&lines);
 	void setTargetColor(const ofColor&c);
 	static void toFile(ofFile& resultsfile, vector<std::pair<ofColor, int>>&dat);
 	static void toFile(ofFile& resultsfile, vector<colorData> &dat, bool clear);
@@ -88,6 +89,7 @@ public:
 	void haveBeenNotifiedBool(bool &b);
 	void haveBeenNotifiedDouble(double &d);
 	void redoButtonPressed();
+	void toscreen(const colorData& data);
 	// read from xml file, 'r' key will refresh data? 
 
 	ofParameter<float> minRadius;
