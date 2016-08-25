@@ -20,6 +20,8 @@ public:
 	float threshold = 0;
 	vector<ofPolyline> lines;
 	bool isCool();
+
+private:
 };
 typedef map<int, colorData> Shapes;
 class Image {
@@ -29,10 +31,7 @@ public:
 	public:
 		ContourFinder finder;
 		shared_ptr<Image>image;
-		colorData* get();
 	private:
-		queue<colorData*> current;
-		void add(colorData*);
 		void threadedFunction();
 	};
 	int index = 0;
@@ -46,6 +45,7 @@ public:
 	string name;
 	string shortname;
 	vector<colorData> drawingData;
+	vector<colorData> ignoredData;
 	ofImage img;//both images stored for Convenience  of the progammer
 	cv::Mat mat;
 	ofParameter<ofColor>warm;
@@ -55,6 +55,8 @@ public:
 	MyThread mythread;
 	ofParameter<int>sortby=0;
 	ofParameter<float> threshold;
+	bool found = false;
+	int allcolors = 0;
 private:
 	static void rgb2ryb(unsigned char &r, unsigned char g, unsigned char &b, unsigned char&y);
 	Shapes shapes; // hash for quick lookup
@@ -74,6 +76,7 @@ public:
 	void setTargetColor(const ofColor&c);
 	static void toFile(ofFile& resultsfile, vector<std::pair<ofColor, int>>&dat);
 	static void toFile(ofFile& resultsfile, vector<colorData> &dat, bool clear);
+	static void toFileHumanForm(ofFile& resultsfile, vector<colorData> &dat, bool clear);
 	static void fromFile(ofFile& resultsfile, vector<ofColor> &dat);
 	void advanceImage();
 	void haveBeenNotifiedFloat(float &f);
@@ -87,6 +90,7 @@ public:
 	ofParameter<float> maxRadius;
 	ofParameter<bool> findHoles;
 	ofParameter<int> smoothingSize;//learn
+	ofParameter<int> allColors;
 	ofParameter<float> smoothingShape;//bugbug learn
 	ofParameter<int> xImage;// make bigger when presenting, smaller when getting colors
 	ofParameter<int> yImage;

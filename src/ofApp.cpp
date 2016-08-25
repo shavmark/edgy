@@ -110,6 +110,19 @@ void LiveArt::toFile(ofFile& resultsfile, vector<colorData>&dat, bool clear) {
 	resultsfile.writeFromBuffer(buffer);
 	resultsfile.close();
 }
+void LiveArt::toFileHumanForm(ofFile& resultsfile, vector<colorData>&dat, bool clear) {
+
+	if (clear) {
+		resultsfile.clear();
+	}
+	ofBuffer buffer;
+	buffer.allocate(dat.size());
+	for (auto itr = dat.begin(); itr != dat.end(); ++itr) {
+		buffer.append(ofToString((int)itr->color.r) + ofToString(",") + ofToString((int)itr->color.g) + ofToString(",") + ofToString((int)itr->color.b) + ofToString("\n"));
+	}
+	resultsfile.writeFromBuffer(buffer);
+	resultsfile.close();
+}
 void LiveArt::fromFile(ofFile& resultsfile, vector<ofColor> &dat) {
 
 	while (resultsfile) {
@@ -255,7 +268,6 @@ void Image::readColors() {
 		resultsfile.open(logDir, ofFile::WriteOnly);
 		LiveArt::toFile(resultsfile, drawingData, true);
 	}
-	
 	sort(drawingData.begin(), drawingData.end(), [=](colorData&  a, colorData&  b) {
 		switch (sortby) {
 		case 0:
@@ -305,14 +317,16 @@ void LiveArt::setMenu(ofxPanel &gui) {
 
 	ofParameterGroup realtime;
 	realtime.add(targetColor.set("RGB", targetColor, 0.0, 255.0));
-	realtime.add(count.set("count", 0));
-	realtime.add(currentIndex.set("current", -1, 0, count));
+	realtime.add(allColors.set("all colors", 0));
+	
+	realtime.add(count.set("used count", 0));
+	realtime.add(currentIndex.set("current", 0));
 	gui.setup(realtime, "setup", 1000, 0);
 
 	ofParameterGroup settings;
 	settings.setName("settings");
 
-	settings.add(threshold.set("Threshold", 5, 0.0, 255.0));
+	settings.add(threshold.set("Threshold", 15, 0.0, 255.0));
 
 	settings.add(minRadius.set("minRadius", 1, 0.0, 255.0));
 	settings.add(maxRadius.set("maxRadius", 150, 0.0, 255.0));
@@ -405,44 +419,52 @@ int LiveArt::getImages() {
 
 	return images.size();
 }
-void Image::MyThread::add(colorData*data) {
-	lock();
-	current.push(data);
-	unlock();
-}
-colorData* Image::MyThread::get() {
-	colorData*data = nullptr;
-	lock();
-	if (current.size() > 0) {
-		data = current.front();
-		current.pop();
-	}
-	unlock();
-	return data;
-}
 void Image::MyThread::threadedFunction() {
 
-		if (image && !image->readIn) {
-			ofLog() << image->name << "start" << endl;
-			image->readColors(); // bugbug read all in, in the future only read in what is shown
-			image->readIn = true;
-			// less colors, do not draw on top of each other, find holes
-			for (int i = 0; i < image->drawingData.size(); ++i) {
-				// bugbug install backup software
-				// put all results in a vector of PolyLines, then sort by size, then draw, save polylines in a file
-				finder.setTargetColor(image->drawingData[i].color, TRACK_COLOR_RGB);
-				finder.findContours(image->mat);
-				if (finder.getPolylines().size() > 1) {
-					image->drawingData[i].lines = finder.getPolylines();
-					image->drawingData[i].threshold = image->threshold;
-					add(&image->drawingData[i]); // only data that can be used outside of thread while thread is running
-				}
-			}
+	if (image && !image->readIn) {
+		ofLog() << image->name << "start" << endl;
+		image->readColors(); // bugbug read all in, in the future only read in what is shown
+		image->readIn = true;
+		image->ignoredData.clear();
+		if (image->allcolors == 0) {
+			image->allcolors = image->drawingData.size(); // save size before empty items are removed
 		}
+		// less colors, do not draw on top of each other, find holes
+		for (auto& itr = image->drawingData.begin(); itr != image->drawingData.end(); ){
+			// put all results in a vector of PolyLines, then sort by size, then draw, save polylines in a file
+			lock();
+			finder.setTargetColor(itr->color, TRACK_COLOR_RGB);
+			finder.findContours(image->mat);
+			if (finder.getPolylines().size() > 0) {
+				itr->lines = finder.getPolylines();
+				itr->threshold = image->threshold;
+				image->found = true;
+				++itr;
+			}
+			else {
+				// remove unused items
+				image->ignoredData.push_back(*itr);
+				itr = image->drawingData.erase(itr);
+			}
+			unlock();
+		}
+		ofFile resultsfile; // save in a file, too much data show -- but the data is key as it shows what is ignored per given rules
+		sort(image->ignoredData.begin(), image->ignoredData.end(), [=](colorData&  a, colorData&  b) {
+			if (a.color.r == b.color.r) {
+				if (a.color.g == b.color.g) {
+					return a.color.b > b.color.b;
+				}
+				return a.color.g > b.color.g;
+			}
+			return a.color.r > b.color.r;
+	
+		});
+		resultsfile.open(image->logDir+ofToString(".notused.dat"), ofFile::WriteOnly);
+		LiveArt::toFileHumanForm(resultsfile, image->ignoredData, true);
+	}
 }
 void LiveArt::setup() {
 	ofLog() << "setup" << endl;
-	SetCursor(LoadCursor(NULL, IDC_WAIT)); // the sin of windows
 	currentIndex = 0;
 
 	if (!readIn) {
@@ -459,7 +481,6 @@ void LiveArt::setup() {
 			ofLog() << "ignore " << images[i]->name << endl;
 			continue;
 		}
-
 		images[i]->mythread.finder.setMinAreaRadius(minRadius);
 		images[i]->mythread.finder.setMaxAreaRadius(maxRadius);
 		images[i]->mythread.finder.setSimplify(true);
@@ -484,43 +505,54 @@ void LiveArt::update() {
 }
 void LiveArt::draw() {
 
+	if (images[currentImage]->index < 0) {
+		return;
+	}
 
-	ofSetColor(ofColor::white);
-	images[currentImage]->img.draw(0, 0);
-
-	ofSetLineWidth(1);
 
 	//ofTranslate(300, 0); keep as a reminder
 
 	// thread is building data so only show current item
-	colorData *p;
+	
+	// show one item at a time
 	ofPushStyle();
-	if (p = images[currentImage]->mythread.get()) {
-		while (p){
-			++images[currentImage]->index;
-			setTargetColor(p->color);
-			ofSetColor(p->color);
-			echo(p->lines);
-			p = images[currentImage]->mythread.get(); // read them all
+	ofSetColor(ofColor::white);
+	images[currentImage]->img.draw(0, 0);
+	ofSetLineWidth(1);
+
+	if (images[currentImage]->mythread.isThreadRunning()) {
+		if (images[currentImage]->found) {
+			// thread that popuplates this data will delete unused items so the list is always changing
+			// just echo the first one found
+			for (; images[currentImage]->index < images[currentImage]->drawingData.size();) {
+				if (images[currentImage]->drawingData[images[currentImage]->index].lines.size() > 0) {
+					setTargetColor(images[currentImage]->drawingData[images[currentImage]->index].color);
+					ofSetColor(images[currentImage]->drawingData[images[currentImage]->index].color);
+					echo(images[currentImage]->drawingData[images[currentImage]->index].lines);
+					++images[currentImage]->index;
+					break;
+				}
+			}
 		}
 	}
 	else {
-		if (images[currentImage]->drawingData.size() > 0) {
-			currentImageName = images[currentImage]->shortname;
-			if (images[currentImage]->index < images[currentImage]->drawingData.size()) {
-				ofSetBackgroundColor(images[currentImage]->warm);//bugbug use lightest found color
-																	// less colors, do not draw on top of each other, find holes
-				setTargetColor(images[currentImage]->drawingData[currentIndex].color);
-				ofSetColor(targetColor); // varibles here include only show large, or smalll, to create different pictures
-				echo(images[currentImage]->drawingData[currentIndex].lines);
-			}
+		currentImageName = images[currentImage]->shortname;
+		int i = images[currentImage]->index;
+		int s = images[currentImage]->drawingData.size();
+		if (images[currentImage]->index >= images[currentImage]->drawingData.size()) {
+			images[currentImage]->index = -1; // stop
+		}
+		else if (images[currentImage]->index < images[currentImage]->drawingData.size()) {
+			ofSetBackgroundColor(images[currentImage]->warm);//bugbug use lightest found color
+																// less colors, do not draw on top of each other, find holes
+			setTargetColor(images[currentImage]->drawingData[images[currentImage]->index].color);
+			ofSetColor(targetColor); // varibles here include only show large, or smalll, to create different pictures
+			echo(images[currentImage]->drawingData[images[currentImage]->index].lines);
 			++images[currentImage]->index;
 		}
 	}
-	if (images[currentImage]->index >= images[currentImage]->drawingData.size()) {
-		images[currentImage]->index = -1; // stop
-	}
 	currentIndex = images[currentImage]->index;
+	allColors = images[currentImage]->allcolors;
 	ofPopStyle();
 }
 void LiveArt::echo(vector<ofPolyline>&lines) {
@@ -548,6 +580,9 @@ void LiveArt::advanceImage()
 		currentImage = 0;
 	}
 	currentImageName = images[currentImage]->shortname;
+	if (images[currentImage]->index < 0) {
+		images[currentImage]->index = 0; // start again if stopped?
+	}
 	setup();
 }
 void ofApp::setup() {
