@@ -35,6 +35,7 @@ public:
 		void add(colorData*);
 		void threadedFunction();
 	};
+	int index = 0;
 
 	bool findOrAdd(const ofColor&color, bool add);
 	bool testForExistance(ofColor color, int i, int j, int k);// test for existance
@@ -95,7 +96,7 @@ public:
 	ofParameter<string>currentImageName;
 	ofParameter<float> threshold;
 	ofParameter<int> count;
-	ofParameter<int> index;
+	ofParameter<int> currentIndex;
 	ofParameter<ofColor>targetColor;
 	ofxButton redo;
 	ofxButton cancel;
@@ -108,7 +109,7 @@ public:
 	ofParameter<int> sortby=0;
 
 	void snapshot(const string& name);
-	void restore(){ index = savex; }
+	void restore(){ currentIndex = savex; }
 
 private:
 	int savex = 0;

@@ -4,8 +4,8 @@
 
 //bugbug remove this
 void LiveArt::snapshot(const string& name) {
-	savex = index;
-	index = -1;
+	savex = currentIndex;
+	currentIndex = -1;
 
 	string filename = "logs\\";
 	filename += name+"\\";
@@ -259,16 +259,16 @@ void Image::readColors() {
 	sort(drawingData.begin(), drawingData.end(), [=](colorData&  a, colorData&  b) {
 		switch (sortby) {
 		case 0:
-			return a.color.getSaturation() > a.color.getSaturation();//bugbug this bug works!!
+			return a.color.getSaturation() > b.color.getSaturation();
 		case 1:
 			return a.lines.size() > b.lines.size();
 		case 2:
 			if (a.color.getSaturation() == a.color.getSaturation()) {
 				return a.lines.size() > b.lines.size();
 			}
-			return  a.color.getSaturation() > a.color.getSaturation();
+			return  a.color.getSaturation() > b.color.getSaturation();
 		case 3:
-			if (a.lines.size() == a.lines.size()) {
+			if (a.lines.size() == b.lines.size()) {
 				return a.color.getSaturation() > b.color.getSaturation();
 			}
 			return  a.lines.size() > a.lines.size();
@@ -306,7 +306,7 @@ void LiveArt::setMenu(ofxPanel &gui) {
 	ofParameterGroup realtime;
 	realtime.add(targetColor.set("RGB", targetColor, 0.0, 255.0));
 	realtime.add(count.set("count", 0));
-	realtime.add(index.set("current", -1, 0, count));
+	realtime.add(currentIndex.set("current", -1, 0, count));
 	gui.setup(realtime, "setup", 1000, 0);
 
 	ofParameterGroup settings;
@@ -443,7 +443,7 @@ void Image::MyThread::threadedFunction() {
 void LiveArt::setup() {
 	ofLog() << "setup" << endl;
 	SetCursor(LoadCursor(NULL, IDC_WAIT)); // the sin of windows
-	index = 0;
+	currentIndex = 0;
 
 	if (!readIn) {
 		if (!getImages()) {
@@ -495,28 +495,32 @@ void LiveArt::draw() {
 	// thread is building data so only show current item
 	colorData *p;
 	ofPushStyle();
-	if (images[currentImage]->mythread.isThreadRunning() && (p = images[currentImage]->mythread.get())) {
-		setTargetColor(p->color);
-		ofSetColor(p->color);
-		echo(p->lines);
-		++index; // show progress
-	}
-	else {
-		if (index > -1 && images[currentImage]->drawingData.size() > 0) {
-			currentImageName = images[currentImage]->shortname;
-			if (index < images[currentImage]->drawingData.size()) {
-				ofSetBackgroundColor(images[currentImage]->warm);//bugbug use lightest found color
-																	// less colors, do not draw on top of each other, find holes
-				setTargetColor(images[currentImage]->drawingData[index].color);
-				ofSetColor(targetColor); // varibles here include only show large, or smalll, to create different pictures
-				echo(images[currentImage]->drawingData[index].lines);
-			}
-			++index;
-			if (index >= images[currentImage]->drawingData.size()) {
-				index = -1; // stop
-			}
+	if (p = images[currentImage]->mythread.get()) {
+		while (p){
+			++images[currentImage]->index;
+			setTargetColor(p->color);
+			ofSetColor(p->color);
+			echo(p->lines);
+			p = images[currentImage]->mythread.get(); // read them all
 		}
 	}
+	else {
+		if (images[currentImage]->drawingData.size() > 0) {
+			currentImageName = images[currentImage]->shortname;
+			if (images[currentImage]->index < images[currentImage]->drawingData.size()) {
+				ofSetBackgroundColor(images[currentImage]->warm);//bugbug use lightest found color
+																	// less colors, do not draw on top of each other, find holes
+				setTargetColor(images[currentImage]->drawingData[currentIndex].color);
+				ofSetColor(targetColor); // varibles here include only show large, or smalll, to create different pictures
+				echo(images[currentImage]->drawingData[currentIndex].lines);
+			}
+			++images[currentImage]->index;
+		}
+	}
+	if (images[currentImage]->index >= images[currentImage]->drawingData.size()) {
+		images[currentImage]->index = -1; // stop
+	}
+	currentIndex = images[currentImage]->index;
 	ofPopStyle();
 }
 void LiveArt::echo(vector<ofPolyline>&lines) {
@@ -543,7 +547,6 @@ void LiveArt::advanceImage()
 	if (currentImage >= images.size()) {
 		currentImage = 0;
 	}
-	index = 0;
 	currentImageName = images[currentImage]->shortname;
 	setup();
 }
@@ -589,7 +592,7 @@ void ofApp::draw() {
 }
 void ofApp::keyPressed(int key) {
 	if (key == ' ') {
-		if (art.index == -1) {
+		if (art.images[art.currentImage]->index == -1) {
 			art.restore();
 		}
 		else {
@@ -603,7 +606,7 @@ void ofApp::keyPressed(int key) {
 		art.setup();
 	}
 	else if (key == 's') {
-		art.index = 0; // go from start
+		art.images[art.currentImage]->index = 0; // go from start
 	}
 	else if (key == 'x') {
 		string name = "save\\";
@@ -611,9 +614,9 @@ void ofApp::keyPressed(int key) {
 		art.images[art.currentImage]->img.save(name);
 	}
 	else if (key == 'b') {
-		art.index -= 20; // hit b a bunch of times to get back to the start
-		if (art.index < 0) {
-			art.index = 0;
+		art.images[art.currentImage]->index -= 20; // hit b a bunch of times to get back to the start
+		if (art.images[art.currentImage]->index < 0) {
+			art.images[art.currentImage]->index = 0;
 		}
 	}
 }
