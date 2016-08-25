@@ -554,7 +554,7 @@ void LiveArt::draw() {
 	// show one item at a time
 	ofPushStyle();
 	ofSetColor(ofColor::white);
-	images[currentImage]->img.draw(0, 0);
+	//images[currentImage]->img.draw(0, 0);
 	ofSetLineWidth(1);
 	int i = images[currentImage]->index;// for debug
 	if (images[currentImage]->mythread.isThreadRunning()) {

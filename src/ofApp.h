@@ -51,7 +51,7 @@ public:
 	string shortname;
 	vector<colorData> drawingData;
 	vector<colorData> ignoredData;
-	int lineThreshHold = 2;
+	int lineThreshHold = 0;
 	ofImage img;//both images stored for Convenience  of the progammer
 	cv::Mat mat;
 	ofParameter<ofColor>warm;
