@@ -214,7 +214,7 @@ Image::Image(string& filename) {
 
 void Image::readColors() {
 	ofFile resultsfile(logDir);
-
+	drawingData.clear();
 	if (resultsfile.exists()) {
 		// using a file, hash not needed as all data is just loaded in
 		ofLog() << "use data" << logDir << endl;
@@ -330,7 +330,7 @@ void LiveArt::setMenu(ofxPanel &gui) {
 	ofParameterGroup settings;
 	settings.setName("settings");
 
-	settings.add(threshold.set("Threshold", 8, 1.0, 255.0));
+	settings.add(threshold.set("Threshold", 10, 1.0, 255.0)); // 8 works great, 5 not as much, 10?
 
 	settings.add(minRadius.set("minRadius", 1, 0.0, 255.0));
 	settings.add(maxRadius.set("maxRadius", 150, 0.0, 255.0));
@@ -435,12 +435,13 @@ colorData Image::MyThread::get() {
 }
 void Image::MyThread::threadedFunction() {
 
-	if (image && !image->readIn) {
+	if (image) {
 		setDone(false);
 		ofLog() << image->name << "start" << endl;
 		image->readColors(); // bugbug read all in, in the future only read in what is shown
 		image->readIn = true;
 		image->ignoredData.clear();
+		image->hits = 0;
 		//   contourFinder.setMinAreaNorm(ofMap(mouseY, 0, ofGetHeight(), 0.0, 1.0));
 		// less colors, do not draw on top of each other, find holes
 		for (auto& itr = image->drawingData.begin(); itr != image->drawingData.end(); ){
@@ -498,6 +499,7 @@ void LiveArt::setup() {
 			continue;
 		}
 		images[i]->mythread.setDone(false);
+		images[i]->index = -1; // no need to show data until the user asks for a scan again
 		//images[i]->mythread.finder.setMinAreaRadius(minRadius);
 		//images[i]->mythread.finder.setMaxAreaRadius(maxRadius);
 		images[i]->mythread.finder.setSimplify(true);
@@ -540,23 +542,12 @@ bool LiveArt::toscreen(const colorData& data) {
 	return false;
 }
 void LiveArt::draw() {
-
-	if (images[currentImage]->index < 0) {
-		count = -1;
-		return;
-	}
-
-
-	//ofTranslate(300, 0); keep as a reminder
-
-	// thread is building data so only show current item
-	
-	// show one item at a time
 	ofPushStyle();
 	ofSetColor(ofColor::white);
 	images[currentImage]->img.draw(0, 0);
+
 	ofSetLineWidth(1);
-	int i = images[currentImage]->index;// for debug
+
 	if (!images[currentImage]->mythread.isDone()) {
 		toscreen(images[currentImage]->mythread.get());
 	}
@@ -567,14 +558,28 @@ void LiveArt::draw() {
 				break;
 			}
 		} while (1);
+	}
 
-		if (images[currentImage]->index >= images[currentImage]->drawingData.size()) {
-			images[currentImage]->index = -1; // stop
-		}
-		else if (images[currentImage]->index < images[currentImage]->drawingData.size()) {
-			toscreen(images[currentImage]->drawingData[images[currentImage]->index]);
-			++images[currentImage]->index;
-		}
+	if (images[currentImage]->index < 0) {
+		count = -1;
+		ofPopStyle();
+		return;
+	}
+
+	//ofTranslate(300, 0); keep as a reminder
+
+	// thread is building data so only show current item
+	
+	// show one item at a time
+
+	int i = images[currentImage]->index;// for debug
+	int s = images[currentImage]->drawingData.size();
+	if (images[currentImage]->index >= images[currentImage]->drawingData.size()) {
+		images[currentImage]->index = -1; // stop
+	}
+	else if (images[currentImage]->index < images[currentImage]->drawingData.size()) {
+		toscreen(images[currentImage]->drawingData[images[currentImage]->index]);
+		++images[currentImage]->index;
 	}
 	ofPopStyle();
 }
@@ -663,7 +668,7 @@ void ofApp::keyPressed(int key) {
 	}
 	else if (key == 'x') {
 		string name = "save\\";
-		name += art.images[art.currentImage]->shortname;
+		name += ofToString("save.")+art.images[art.currentImage]->shortname;
 		art.images[art.currentImage]->img.save(name);
 	}
 	else if (key == 'b') {
