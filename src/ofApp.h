@@ -58,7 +58,7 @@ public:
 	ofImage img;//both images stored for Convenience  of the progammer
 	cv::Mat mat;
 	ofParameter<ofColor>warm;
-	ofParameter<int> shrinkby = 3;
+	ofParameter<int> shrinkby = 4; // 5 shaves off some brightness, 3 is pretty good but slow. 2 is slow but? 4?
 	string logDir="logs\\";
 	bool readIn = false;
 	MyThread mythread;
@@ -82,10 +82,8 @@ public:
 	void setMenu(ofxPanel &gui);
 	void echo(const vector<ofPolyline>&lines);
 	void setTargetColor(const ofColor&c);
-	static void toFile(ofFile& resultsfile, vector<std::pair<ofColor, int>>&dat);
 	static void toFile(ofFile& resultsfile, vector<colorData> &dat, bool clear);
 	static void toFileHumanForm(ofFile& resultsfile, vector<colorData> &dat, bool clear);
-	static void fromFile(ofFile& resultsfile, vector<ofColor> &dat);
 	void advanceImage();
 	void haveBeenNotifiedFloat(float &f);
 	void haveBeenNotifiedInt(int &i);
@@ -120,10 +118,8 @@ public:
 	vector<shared_ptr<Image>> images;
 	ofParameter<int> sortby=0;
 
-	void snapshot(const string& name);
 
 private:
-	int savecount = 0;
 	int getImages();
 	bool readIn = false;
 };

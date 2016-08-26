@@ -2,15 +2,6 @@
 #include <time.h>
 #include <algorithm>
 
-//bugbug remove this
-void LiveArt::snapshot(const string& name) {
-	string filename = "logs\\";
-	filename += name+"\\";
-	filename += ofToString(savecount++);
-	filename += ".dat";
-	ofFile resultsfile(filename);
-	//resultsfile.close();
-}
 void LiveArt::setTargetColor(const ofColor&c) {
 	targetColor = c;
 	Image::rgbToryb(targetColor, red, yellow, blue);
@@ -79,21 +70,6 @@ void Image::rgb2ryb(unsigned char &r, unsigned char g, unsigned char &b, unsigne
 
 }
 
-void LiveArt::toFile(ofFile& resultsfile, vector<std::pair<ofColor, int>>&dat) {
-
-	time_t rawtime;
-	time(&rawtime);
-
-	resultsfile << ctime(&rawtime) << "\n";
-
-	int i = 1;
-	for (auto itr = dat.begin(); itr != dat.end(); ++itr) {
-		resultsfile << i << ":" << itr->first << ":" << itr->second << "\n";
-		++i;
-	}
-
-	resultsfile.close();
-}
 void LiveArt::toFile(ofFile& resultsfile, vector<colorData>&dat, bool clear) {
 
 	if (clear) {
@@ -119,14 +95,6 @@ void LiveArt::toFileHumanForm(ofFile& resultsfile, vector<colorData>&dat, bool c
 	}
 	resultsfile.writeFromBuffer(buffer);
 	resultsfile.close();
-}
-void LiveArt::fromFile(ofFile& resultsfile, vector<ofColor> &dat) {
-
-	while (resultsfile) {
-		ofColor cur;
-		resultsfile >> cur;
-		dat.push_back(cur);
-	}
 }
 
 bool colorData::isCool() {
@@ -273,7 +241,7 @@ void Image::readColors() {
 		switch (sortby) {
 		case 0:
 			if (a.color.getSaturation() == b.color.getSaturation()) {
-				return a.color.getLightness() > b.color.getLightness();
+				return a.color.getLightness() < b.color.getLightness();
 			}
 			return a.color.getSaturation() > b.color.getSaturation();
 		case 1:
@@ -669,7 +637,10 @@ void ofApp::keyPressed(int key) {
 	else if (key == 'x') {
 		string name = "save\\";
 		name += ofToString("save.")+art.images[art.currentImage]->shortname;
-		art.images[art.currentImage]->img.save(name);
+		name += ".png";
+		ofImage img;
+		img.grabScreen(art.xImage, 0, art.xImage, art.yImage);
+		img.save(name);
 	}
 	else if (key == 'b') {
 		art.images[art.currentImage]->index -= 20; // hit b a bunch of times to get back to the start
