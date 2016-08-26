@@ -36,7 +36,10 @@ public:
 		shared_ptr<Image>image;
 		colorData get();
 		queue<colorData> tracedata;
+		bool isDone() { return done; }
+		void setDone(bool b = true) { done = b; }
 	private:
+		bool done = false;
 		void threadedFunction();
 	};
 	int index = 0;
@@ -89,7 +92,7 @@ public:
 	void haveBeenNotifiedBool(bool &b);
 	void haveBeenNotifiedDouble(double &d);
 	void redoButtonPressed();
-	void toscreen(const colorData& data);
+	bool toscreen(const colorData& data);
 	// read from xml file, 'r' key will refresh data? 
 
 	ofParameter<float> minRadius;

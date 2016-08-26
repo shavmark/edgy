@@ -266,13 +266,16 @@ void Image::readColors() {
 		resultsfile.open(logDir, ofFile::WriteOnly);
 		LiveArt::toFile(resultsfile, drawingData, true);
 	}
+
+	allcolors = drawingData.size(); // save size before empty items are removed
+
 	sort(drawingData.begin(), drawingData.end(), [=](colorData&  a, colorData&  b) {
 		switch (sortby) {
 		case 0:
 			if (a.color.getSaturation() == b.color.getSaturation()) {
-				return a.color.getBrightness() < b.color.getBrightness();
+				return a.color.getLightness() > b.color.getLightness();
 			}
-			return a.color.getSaturation() < b.color.getSaturation();
+			return a.color.getSaturation() > b.color.getSaturation();
 		case 1:
 			return a.lines.size() > b.lines.size();
 		case 2:
@@ -319,7 +322,7 @@ void LiveArt::setMenu(ofxPanel &gui) {
 
 	ofParameterGroup realtime;
 	realtime.add(targetColor.set("RGB", targetColor, 0.0, 255.0));
-	realtime.add(allColors.set("all colors", 0));
+	realtime.add(allColors.set("all colors", 0, 0, 100000));
 	
 	realtime.add(count.set("used count", 0));
 	gui.setup(realtime, "setup", 700 *2, 0);
@@ -327,7 +330,7 @@ void LiveArt::setMenu(ofxPanel &gui) {
 	ofParameterGroup settings;
 	settings.setName("settings");
 
-	settings.add(threshold.set("Threshold", 5, 1.0, 255.0));
+	settings.add(threshold.set("Threshold", 8, 1.0, 255.0));
 
 	settings.add(minRadius.set("minRadius", 1, 0.0, 255.0));
 	settings.add(maxRadius.set("maxRadius", 150, 0.0, 255.0));
@@ -433,18 +436,17 @@ colorData Image::MyThread::get() {
 void Image::MyThread::threadedFunction() {
 
 	if (image && !image->readIn) {
+		setDone(false);
 		ofLog() << image->name << "start" << endl;
 		image->readColors(); // bugbug read all in, in the future only read in what is shown
 		image->readIn = true;
 		image->ignoredData.clear();
-		if (image->allcolors == 0) {
-			image->allcolors = image->drawingData.size(); // save size before empty items are removed
-		}
+		//   contourFinder.setMinAreaNorm(ofMap(mouseY, 0, ofGetHeight(), 0.0, 1.0));
 		// less colors, do not draw on top of each other, find holes
 		for (auto& itr = image->drawingData.begin(); itr != image->drawingData.end(); ){
 			// put all results in a vector of PolyLines, then sort by size, then draw, save polylines in a file
-			finder.setTargetColor(itr->color, TRACK_COLOR_RGB);
-			finder.findContours(image->mat);
+			finder.setTargetColor(itr->color, TRACK_COLOR_RGB);// different colors
+			finder.findContours(image->mat);// same image
 			if (finder.getPolylines().size() > image->lineThreshHold) {
 				itr->lines = finder.getPolylines();
 				itr->threshold = image->threshold;
@@ -452,23 +454,15 @@ void Image::MyThread::threadedFunction() {
 				tracedata.push(*itr);
 				unlock();
 				++image->hits;
-				
+				++itr;
 			}
-			++itr;
+			else {
+				image->ignoredData.push_back(*itr);
+				itr = image->drawingData.erase(itr);
+			}
 		}
 		// only do this once somethings is found
 		if (image->hits > 0) {
-			for (auto& itr = image->drawingData.begin(); itr != image->drawingData.end(); ) {
-				// put all results in a vector of PolyLines, then sort by size, then draw, save polylines in a file
-				if (itr->lines.size() == 0) {
-					// remove unused items
-					image->ignoredData.push_back(*itr);
-					itr = image->drawingData.erase(itr);
-				}
-				else {
-					++itr;
-				}
-			}
 			ofFile resultsfile; // save in a file, too much data show -- but the data is key as it shows what is ignored per given rules
 			sort(image->ignoredData.begin(), image->ignoredData.end(), [=](colorData&  a, colorData&  b) {
 				if (a.color.r == b.color.r) {
@@ -483,7 +477,7 @@ void Image::MyThread::threadedFunction() {
 			resultsfile.open(image->logDir + ofToString(".notused.dat"), ofFile::WriteOnly);
 			LiveArt::toFileHumanForm(resultsfile, image->ignoredData, true);
 		}
-
+		setDone();
 	}
 }
 void LiveArt::setup() {
@@ -503,8 +497,9 @@ void LiveArt::setup() {
 			ofLog() << "ignore " << images[i]->name << endl;
 			continue;
 		}
-		images[i]->mythread.finder.setMinAreaRadius(minRadius);
-		images[i]->mythread.finder.setMaxAreaRadius(maxRadius);
+		images[i]->mythread.setDone(false);
+		//images[i]->mythread.finder.setMinAreaRadius(minRadius);
+		//images[i]->mythread.finder.setMaxAreaRadius(maxRadius);
 		images[i]->mythread.finder.setSimplify(true);
 		images[i]->mythread.finder.setAutoThreshold(false);
 		images[i]->mythread.finder.setThreshold(threshold);
@@ -524,20 +519,25 @@ void LiveArt::setup() {
 
 void LiveArt::update() {
 	// remove unused data
-	if (images[currentImage]->mythread.isThreadRunning()) {
-		count = images[currentImage]->hits;
-	}
-	else {
+	if (images[currentImage]->mythread.isDone()) {
 		count = images[currentImage]->drawingData.size();
 	}
+	else {
+		count = images[currentImage]->hits;
+	}
+	currentImageName = images[currentImage]->shortname;
+	allColors = images[currentImage]->allcolors;
 }
-void LiveArt::toscreen(const colorData& data) {
+// true if draw occured
+bool LiveArt::toscreen(const colorData& data) {
 	if (data.lines.size() > 0) {
 		ofSetBackgroundColor(images[currentImage]->warm);
 		setTargetColor(data.color);
 		ofSetColor(data.color);
 		echo(data.lines);
+		return true;
 	}
+	return false;
 }
 void LiveArt::draw() {
 
@@ -554,39 +554,28 @@ void LiveArt::draw() {
 	// show one item at a time
 	ofPushStyle();
 	ofSetColor(ofColor::white);
-	//images[currentImage]->img.draw(0, 0);
+	images[currentImage]->img.draw(0, 0);
 	ofSetLineWidth(1);
 	int i = images[currentImage]->index;// for debug
-	if (images[currentImage]->mythread.isThreadRunning()) {
+	if (!images[currentImage]->mythread.isDone()) {
 		toscreen(images[currentImage]->mythread.get());
 	}
 	else {
 		// clean out any remaining data
 		do {
-			colorData data = images[currentImage]->mythread.get();
-			if (data.lines.size() > 0) {
-				toscreen(images[currentImage]->mythread.get());
-			}
-			else {
-				images[currentImage]->index = -1; // stop
+			if (!toscreen(images[currentImage]->mythread.get())) {
 				break;
 			}
 		} while (1);
 
-		currentImageName = images[currentImage]->shortname;
-		int i = images[currentImage]->index;
-		int s = images[currentImage]->drawingData.size();
 		if (images[currentImage]->index >= images[currentImage]->drawingData.size()) {
 			images[currentImage]->index = -1; // stop
 		}
 		else if (images[currentImage]->index < images[currentImage]->drawingData.size()) {
 			toscreen(images[currentImage]->drawingData[images[currentImage]->index]);
-			ofSetBackgroundColor(images[currentImage]->warm);//bugbug use lightest found color
-																// less colors, do not draw on top of each other, find holes
 			++images[currentImage]->index;
 		}
 	}
-	allColors = images[currentImage]->allcolors;
 	ofPopStyle();
 }
 void LiveArt::echo(const vector<ofPolyline>&lines) {
