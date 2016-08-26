@@ -70,20 +70,20 @@ void Image::rgb2ryb(unsigned char &r, unsigned char g, unsigned char &b, unsigne
 
 }
 
-void LiveArt::toFile(ofFile& resultsfile, vector<colorData>&dat, bool clear) {
+void LiveArt::toFile(ofFile& resultsfile, vector<shared_ptr<colorData>>dat, bool clear) {
 
 	if (clear) {
 		resultsfile.clear();
 	}
 	ofBuffer buffer;
 	buffer.allocate(dat.size());
-	for (auto itr = dat.begin(); itr != dat.end(); ++itr) {
-		buffer.append(ofToString(itr->color.getHex()) + "\n");
+	for (auto& itr = dat.begin(); itr != dat.end(); ++itr) {
+		buffer.append(ofToString((*itr)->getTargetColor().getHex()) + "\n");
 	}
 	resultsfile.writeFromBuffer(buffer);
 	resultsfile.close();
 }
-void LiveArt::toFileHumanForm(ofFile& resultsfile, vector<colorData>&dat, bool clear) {
+void LiveArt::toFileHumanForm(ofFile& resultsfile, vector<shared_ptr<colorData> >dat, bool clear) {
 
 	if (clear) {
 		resultsfile.clear();
@@ -91,14 +91,14 @@ void LiveArt::toFileHumanForm(ofFile& resultsfile, vector<colorData>&dat, bool c
 	ofBuffer buffer;
 	buffer.allocate(dat.size());
 	for (auto itr = dat.begin(); itr != dat.end(); ++itr) {
-		buffer.append(ofToString((int)itr->color.r) + ofToString(",") + ofToString((int)itr->color.g) + ofToString(",") + ofToString((int)itr->color.b) + ofToString("\n"));
+		buffer.append(ofToString((int)(*itr)->getTargetColor().r) + ofToString(",") + ofToString((int)(*itr)->getTargetColor().g) + ofToString(",") + ofToString((int)(*itr)->getTargetColor().b) + ofToString("\n"));
 	}
 	resultsfile.writeFromBuffer(buffer);
 	resultsfile.close();
 }
 
 bool colorData::isCool() {
-	float h = color.getHue();
+	float h = getTargetColor().getHue();
 	return (h > 80 && h < 330);
 }
 bool Image::findOrAdd(const ofColor&color, bool add) {
@@ -110,7 +110,7 @@ bool Image::findOrAdd(const ofColor&color, bool add) {
 	else {
 		if (add) {
 			colorData data;
-			data.color = color;
+			data.setTargetColor(color);
 			shapes.insert(make_pair(color.getHex(), data));
 			return true;
 		}
@@ -192,12 +192,15 @@ void Image::readColors() {
 			if (!hex) {
 				continue;
 			}
-			colorData data; // each line is a hex
-			data.color.setHex(ofToInt(line));//bugbug alpha ignored
-			drawingData.push_back(data);// will be sorted later in this function //bugbug go to shared pointer?
-			//(0.299*R + 0.587*G + 0.114*B)
-			if (warm.get().getBrightness() < data.color.getBrightness() && !data.isCool()) {
-				warm = data.color;// go with most recent
+			shared_ptr<colorData> data= make_shared<colorData>(); 
+			if (data) {
+				data->getTargetColor().setHex(ofToInt(line));//bugbug alpha ignored
+				data->setThreshold(threshold);
+				drawingData.push_back(data);// will be sorted later in this function //bugbug go to shared pointer?
+											//(0.299*R + 0.587*G + 0.114*B)
+				if (warm.get().getBrightness() < data->getTargetColor().getBrightness() && !data->isCool()) {
+					warm = data->getTargetColor();// go with most recent
+				}
 			}
 		}
 	}
@@ -207,25 +210,23 @@ void Image::readColors() {
 		vector<ofColor> dat;
 		for (int w = 0; w < img.getWidth(); w += 1) {
 			for (int h = 0; h < img.getHeight(); h += 1) {
-				colorData data;
-				data.color = img.getPixels().getColor(w, h);
+				shared_ptr<colorData> data = make_shared<colorData>();
+				if (data == nullptr) {
+					return; // we are in a bad place
+				}
+				data->setTargetColor(img.getPixels().getColor(w, h));
 				// bugbug ? save all colors in a file so its easier to tweak data later? maybe a different file?
 
 				bool found;
 				//if (color.r == 255 && color.g == 255 && color.b == 255) {
 				//continue; //ignore white need this to be the back ground color
 				//}
-				if (warm.get().getBrightness() < data.color.getBrightness()) {
-					warm = data.color;// go with most recent
+				if (warm.get().getBrightness() < data->getTargetColor().getBrightness()) {
+					warm = data->getTargetColor();// go with most recent
 				}
-				if (data.color.getBrightness() > 255) { // ignore the super bright stuff
-					data.color.setBrightness(255); // see what else can be done here
-					found = dedupe(data.color, shrinkby, shrinkby, shrinkby);
-				}
-				else {
-					found = dedupe(data.color, shrinkby, shrinkby, shrinkby);
-				}
+				found = dedupe(data->getTargetColor(), shrinkby, shrinkby, shrinkby);
 				if (found) {
+					data->setThreshold(threshold);
 					drawingData.push_back(data);
 				}
 				//bugbug make a mid brightness
@@ -237,30 +238,14 @@ void Image::readColors() {
 
 	allcolors = drawingData.size(); // save size before empty items are removed
 
-	sort(drawingData.begin(), drawingData.end(), [=](colorData&  a, colorData&  b) {
+	sort(drawingData.begin(), drawingData.end(), [=](shared_ptr<colorData>  a, shared_ptr<colorData>  b) {
 		switch (sortby) {
 		case 0:
-			if (a.color.getSaturation() == b.color.getSaturation()) {
-				return a.color.getLightness() < b.color.getLightness();
+			if (a->getTargetColor().getSaturation() == b->getTargetColor().getSaturation()) {
+				return a->getTargetColor().getLightness() < b->getTargetColor().getLightness();
 			}
-			return a.color.getSaturation() > b.color.getSaturation();
-		case 1:
-			return a.lines.size() > b.lines.size();
-		case 2:
-			if (a.color.getSaturation() == a.color.getSaturation()) {
-				return a.lines.size() > b.lines.size();
-			}
-			return  a.color.getSaturation() > b.color.getSaturation();
-		case 3:
-			if (a.lines.size() == b.lines.size()) {
-				return a.color.getSaturation() > b.color.getSaturation();
-			}
-			return  a.lines.size() > a.lines.size();
-		case 4:
-			return a.color.getSaturation() > b.color.getSaturation();
-		default:
-			return a.color.getSaturation() < b.color.getSaturation();
 		}
+		return a->getTargetColor().getSaturation() < b->getTargetColor().getSaturation();
 		//bugbug need to add in sort by size, count, saturation, brightness, object size etc
 	});
 
@@ -391,15 +376,52 @@ int LiveArt::getImages() {
 
 	return images.size();
 }
-colorData Image::MyThread::get() {
-	colorData data;
+shared_ptr<colorData> Image::MyThread::get() {
+	shared_ptr<colorData> data = nullptr;
 	lock();
 	if (!tracedata.empty()) {
-		data = tracedata.front();
+		int i = tracedata.front();
+		data = image->drawingData[i];
 		tracedata.pop();
 	}
 	unlock();
 	return data;
+}
+bool myContourFinder::findContours(Mat img) {
+	// threshold the image using a tracked color or just binary grayscale
+	if (useTargetColor) {
+		Scalar offset(thresholdValue, thresholdValue, thresholdValue);
+		Scalar base = toCv(targetColor);
+		if (trackingColorMode == TRACK_COLOR_RGB) {
+			inRange(img, base - offset, base + offset, thresh);
+		}
+	}
+	else {
+		copyGray(img, thresh);
+	}
+
+	// run the contour finder
+	vector<vector<cv::Point> > allContours;
+	std::vector<std::vector<cv::Point> > contours;
+	vector<size_t> allIndices;
+	cv::findContours(thresh, allContours, CV_CHAIN_APPROX_SIMPLE, true);
+
+	for (size_t i = 0; i < allContours.size(); i++) {
+		allIndices.push_back(i);
+	}
+
+	// generate polylines from the contours
+	std::vector<ofPolyline> polylines;
+	for (size_t i = 0; i < allIndices.size(); i++) {
+		contours.push_back(allContours[allIndices[i]]);
+		polylines.push_back(toOf(contours[i]).getSmoothed(2));//getSmoothed bugbug study this
+	}
+	if (polylines.size() > 0) {
+		ofTessellator tess;
+		tess.tessellateToMesh(polylines, OF_POLY_WINDING_ODD, mesh, true);
+	}
+	return polylines.size() > 0;
+
 }
 void Image::MyThread::threadedFunction() {
 
@@ -412,35 +434,30 @@ void Image::MyThread::threadedFunction() {
 		image->hits = 0;
 		//   contourFinder.setMinAreaNorm(ofMap(mouseY, 0, ofGetHeight(), 0.0, 1.0));
 		// less colors, do not draw on top of each other, find holes
-		for (auto& itr = image->drawingData.begin(); itr != image->drawingData.end(); ){
+		for (int i = 0; i <  image->drawingData.size(); ++i) {
 			// put all results in a vector of PolyLines, then sort by size, then draw, save polylines in a file
-			finder.setTargetColor(itr->color, TRACK_COLOR_RGB);// different colors
-			finder.findContours(image->mat);// same image
-			if (finder.getPolylines().size() > image->lineThreshHold) {
-				itr->lines = finder.getPolylines();
-				itr->threshold = image->threshold;
+			if (image->drawingData[i]->findContours(image->mat)) {
 				lock();
-				tracedata.push(*itr);
+				tracedata.push(i);
 				unlock();
 				++image->hits;
-				++itr;
 			}
 			else {
-				image->ignoredData.push_back(*itr);
-				itr = image->drawingData.erase(itr);
+				image->ignoredData.push_back(image->drawingData[i]);
+				image->drawingData.erase(image->drawingData.begin() + i); // assume past indexes remain correct after delete
 			}
 		}
 		// only do this once somethings is found
 		if (image->hits > 0) {
 			ofFile resultsfile; // save in a file, too much data show -- but the data is key as it shows what is ignored per given rules
-			sort(image->ignoredData.begin(), image->ignoredData.end(), [=](colorData&  a, colorData&  b) {
-				if (a.color.r == b.color.r) {
-					if (a.color.g == b.color.g) {
-						return a.color.b > b.color.b;
+			sort(image->ignoredData.begin(), image->ignoredData.end(), [=](shared_ptr<colorData>  a, shared_ptr<colorData> b) {
+				if (a->getTargetColor().r == b->getTargetColor().r) {
+					if (a->getTargetColor().g == b->getTargetColor().g) {
+						return a->getTargetColor().b > b->getTargetColor().b;
 					}
-					return a.color.g > b.color.g;
+					return a->getTargetColor().g > b->getTargetColor().g;
 				}
-				return a.color.r > b.color.r;
+				return a->getTargetColor().r > b->getTargetColor().r;
 
 			});
 			resultsfile.open(image->logDir + ofToString(".notused.dat"), ofFile::WriteOnly);
@@ -470,13 +487,8 @@ void LiveArt::setup() {
 		images[i]->index = -1; // no need to show data until the user asks for a scan again
 		//images[i]->mythread.finder.setMinAreaRadius(minRadius);
 		//images[i]->mythread.finder.setMaxAreaRadius(maxRadius);
-		images[i]->mythread.finder.setSimplify(true);
-		images[i]->mythread.finder.setAutoThreshold(false);
-		images[i]->mythread.finder.setThreshold(threshold);
-		images[i]->mythread.finder.setUseTargetColor(true);
-		images[i]->mythread.finder.setFindHoles(findHoles);// matters
-		images[i]->threshold = threshold;
 		images[i]->sortby = sortby;
+		images[i]->threshold = threshold;
 		images[i]->mythread.image = images[i];
 		images[i]->mythread.startThread();
 	}
@@ -499,13 +511,17 @@ void LiveArt::update() {
 	allColors = images[currentImage]->allcolors;
 }
 // true if draw occured
-bool LiveArt::toscreen(const colorData& data) {
-	if (data.lines.size() > 0) {
-		ofSetBackgroundColor(images[currentImage]->warm);
-		setTargetColor(data.color);
-		ofSetColor(data.color);
-		echo(data.lines);
-		return true;
+bool LiveArt::toscreen(colorData& data) {
+	ofSetBackgroundColor(images[currentImage]->warm);
+	setTargetColor(data.getTargetColor());
+	ofSetColor(data.getTargetColor());
+	echo(data.mesh);
+	return true;
+}
+// true if draw occured
+bool LiveArt::toscreen(shared_ptr<colorData> data) {
+	if (data) {
+		return toscreen(*data);
 	}
 	return false;
 }
@@ -551,23 +567,19 @@ void LiveArt::draw() {
 	}
 	ofPopStyle();
 }
-void LiveArt::echo(const vector<ofPolyline>&lines) {
-
-	if (lines.size() == 0)
-		return;
+void LiveArt::echo(ofMesh&mesh) {
 
 	// use this? fillPoly in wrappers.h
 
 	ofTranslate(xImage, 0);
-	for (auto& itr = lines.begin(); itr != lines.end(); ++itr) {
-		ofPolyline line = itr->getSmoothed(smoothingSize); //bugbug test this data
+	//for (auto& itr = lines.begin(); itr != lines.end(); ++itr) {
 		// cv::Mat dest fillPoly(line, dest); draw dest
-		ofTessellator tess;
-		ofMesh mesh;
-		tess.tessellateToMesh(line, OF_POLY_WINDING_ODD, mesh, true);
+		//ofTessellator tess;
+		//ofMesh mesh;
+		//tess.tessellateToMesh(lines, OF_POLY_WINDING_ODD, mesh, true);
 		mesh.draw();
-		line.draw();
-	}
+		//line.draw();
+	//}
 }
 void LiveArt::advanceImage()
 {

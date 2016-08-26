@@ -10,32 +10,40 @@
 using namespace ofxCv;
 using namespace cv;
 
+class myContourFinder  {
+public:
+	enum TrackingColorMode { TRACK_COLOR_RGB, TRACK_COLOR_HSV, TRACK_COLOR_H, TRACK_COLOR_HS };
+	bool findContours(Mat img);
+	void clear() {
+	}
+	void setThreshold(float t) { thresholdValue = t; }
+	ofColor& getTargetColor() { return targetColor; }
+	void setTargetColor(const ofColor& c) { targetColor = c; }
+	bool useTargetColor = true;
+	float thresholdValue = 5;
+	ofColor targetColor;
+	cv::Mat thresh;
+	TrackingColorMode trackingColorMode= TRACK_COLOR_RGB;
+	ofMesh mesh;
+};
 
-class colorData {
+class colorData : public myContourFinder {
 public:
 	colorData() {}
-	colorData(const ofColor& data) { color = data; } //bugbut not everything is copied
-	int operator==(const colorData& data) { return data.color == color; }
-	ofColor color;
-	float threshold = 0;
-	vector<ofPolyline> lines;
+	colorData(const ofColor& color) { setTargetColor(color); } //bugbut not everything is copied
+	int operator==(const colorData& data) { return targetColor == data.targetColor; }
 	bool isCool();
-
 private:
 };
 typedef map<int, colorData> Shapes;
-class myContourFinder : public ContourFinder {
-public:
-};
-class Image {
+class Image  {
 public:
 	Image(string& filename);
 	class MyThread : public ofThread {
 	public:
-		myContourFinder finder;
 		shared_ptr<Image>image;
-		colorData get();
-		queue<colorData> tracedata;
+		shared_ptr<colorData> get();
+		queue<int> tracedata; // list of indexes that are valid
 		bool isDone() { return done; }
 		void setDone(bool b = true) { done = b; }
 	private:
@@ -44,6 +52,7 @@ public:
 	};
 	int index = 0;
 	int hits = 0;
+	float threshold;
 	bool findOrAdd(const ofColor&color, bool add);
 	bool testForExistance(ofColor color, int i, int j, int k);// test for existance
 	bool dedupe(ofColor color, int rangeR, int rangeG, int rangeB);
@@ -52,18 +61,17 @@ public:
 	void filter(int id, ofParameter<int> a, ofParameter<double> b, ofParameter<double> c);
 	string name;
 	string shortname;
-	vector<colorData> drawingData;
-	vector<colorData> ignoredData;
+	vector<shared_ptr<colorData>> drawingData;
+	vector<shared_ptr<colorData>> ignoredData;
 	int lineThreshHold = 0;
 	ofImage img;//both images stored for Convenience  of the progammer
 	cv::Mat mat;
 	ofParameter<ofColor>warm;
-	ofParameter<int> shrinkby = 4; // 5 shaves off some brightness, 3 is pretty good but slow. 2 is slow but? 4?
+	ofParameter<int> shrinkby = 3; // 5 shaves off some brightness?, 3 is pretty good but slow. 2 is slow and no much better to look at, 4 is ok, not too fast
 	string logDir="logs\\";
 	bool readIn = false;
 	MyThread mythread;
 	ofParameter<int>sortby=0;
-	ofParameter<float> threshold;
 	int allcolors = 0;
 private:
 	static void rgb2ryb(unsigned char &r, unsigned char g, unsigned char &b, unsigned char&y);
@@ -80,17 +88,18 @@ public:
 
 	bool LiveArt::loadAndFilter(shared_ptr<Image> image);
 	void setMenu(ofxPanel &gui);
-	void echo(const vector<ofPolyline>&lines);
+	void echo(ofMesh&mesh);
 	void setTargetColor(const ofColor&c);
-	static void toFile(ofFile& resultsfile, vector<colorData> &dat, bool clear);
-	static void toFileHumanForm(ofFile& resultsfile, vector<colorData> &dat, bool clear);
+	static void toFile(ofFile& resultsfile, vector<shared_ptr<colorData> > dat, bool clear);
+	static void toFileHumanForm(ofFile& resultsfile, vector<shared_ptr<colorData> > dat, bool clear);
 	void advanceImage();
 	void haveBeenNotifiedFloat(float &f);
 	void haveBeenNotifiedInt(int &i);
 	void haveBeenNotifiedBool(bool &b);
 	void haveBeenNotifiedDouble(double &d);
 	void redoButtonPressed();
-	bool toscreen(const colorData& data);
+	bool toscreen(shared_ptr<colorData>data);
+	bool toscreen(colorData& data);
 	// read from xml file, 'r' key will refresh data? 
 
 	ofParameter<float> minRadius;
