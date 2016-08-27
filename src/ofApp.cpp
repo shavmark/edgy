@@ -255,6 +255,7 @@ void LiveArt::haveBeenNotifiedDouble(double &d) {
 }
 void LiveArt::redoButtonPressed() {
 	ofLog() << " event at redo " << endl;
+	readIn = false;
 	ofBackground(images[currentImage]->warm);
 	setup();
 }
@@ -269,7 +270,7 @@ void LiveArt::setMenu(ofxPanel &gui) {
 	realtime.add(allColors.set("all colors", 0, 0, 100000));
 	
 	realtime.add(count.set("used count", 0));
-	gui.setup(realtime, "setup", 700 *2, 0);
+	gui.setup(realtime, "setup", xImage *2, 0);
 
 	ofParameterGroup settings;
 	settings.setName("settings");
@@ -278,8 +279,6 @@ void LiveArt::setMenu(ofxPanel &gui) {
 
 	settings.add(minRadius.set("minRadius", 1, 0.0, 255.0));
 	settings.add(maxRadius.set("maxRadius", 150, 0.0, 255.0));
-	settings.add(xImage.set("xImage", 500,20, 4000.0));
-	settings.add(yImage.set("yImage", 500,20, 4000.0));
 	settings.add(d.set("d", 15, 0.0, 255.0));
 	settings.add(sigmaColor.set("sigmaColor", 80, 0.0, 255.0));
 	settings.add(sigmaSpace.set("sigmaSpace", 80, 0.0, 255.0));
@@ -306,17 +305,17 @@ void Image::filter(int id, ofParameter<int> a, ofParameter<double> b, ofParamete
 	//bugbug get the canny ones here too
 	Mat src = toCv(img);
 	mat = src.clone();
-	return;
+	
 	switch (id) {
 	case 0:
-		//cv::bilateralFilter(toCv(img), mat, a, b, c);
-		//toOf(mat, img); // keep both around, use where it makes the most sense
+		break; // no sort
+	case 1:
 		for (int i = 0; i < 1; ++i)	{
 			bilateralFilter(src, mat, a.get(), b.get(), c.get());
 		}
 		toOf(mat, img);
 		break;
-	case 1:
+	case 2:
 		for (int i = 1; i < MAX_KERNEL_LENGTH; i = i + 2) {
 			GaussianBlur(src, mat, Size(i, i), 0, 0);
 		}

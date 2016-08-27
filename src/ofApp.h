@@ -82,8 +82,8 @@ public:
 	ofParameter<float> minRadius;
 	ofParameter<float> maxRadius;
 	ofParameter<int> allColors;
-	ofParameter<int> xImage;// make bigger when presenting, smaller when getting colors
-	ofParameter<int> yImage;
+	ofParameter<int> xImage=500;// make bigger when presenting, smaller when getting colors
+	ofParameter<int> yImage = 500;
 	ofParameter<int> d; //bugbug learn for bilateralfilter and enable other filters
 	ofParameter<double> sigmaColor; //bugbug learn for bilateralfilter
 	ofParameter<double> sigmaSpace; //bugbug learn for bilateralfilter
