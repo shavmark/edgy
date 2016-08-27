@@ -10,12 +10,20 @@
 using namespace ofxCv;
 using namespace cv;
 
+class drawingData {
+public:
+	void draw() {
+		mesh.draw();
+	}
+	ofColor getTargetColor() { return targetColor; }
+	ofMesh mesh;
+	ofColor targetColor;
+private:
+};
 class myContourFinder  {
 public:
 	enum TrackingColorMode { TRACK_COLOR_RGB, TRACK_COLOR_HSV, TRACK_COLOR_H, TRACK_COLOR_HS };
-	bool findContours(Mat img);
-	void clear() {
-	}
+	bool findContours(Mat img, shared_ptr<drawingData>);
 	void setThreshold(float t) { thresholdValue = t; }
 	ofColor& getTargetColor() { return targetColor; }
 	void setTargetColor(const ofColor& c) { targetColor = c; }
@@ -24,7 +32,7 @@ public:
 	ofColor targetColor;
 	cv::Mat thresh;
 	TrackingColorMode trackingColorMode= TRACK_COLOR_RGB;
-	ofMesh mesh;
+	
 };
 
 class colorData : public myContourFinder {
@@ -36,20 +44,21 @@ public:
 private:
 };
 typedef map<int, colorData> Shapes;
+class Image;
+class MyThread : public ofThread {
+public:
+	shared_ptr<Image>image;
+	shared_ptr<drawingData> get();
+	queue<shared_ptr<drawingData>> tracedata;
+	bool isDone() { return done; }
+	void setDone(bool b = true) { done = b; }
+private:
+	bool done = false;
+	void threadedFunction();
+};
 class Image  {
 public:
 	Image(string& filename);
-	class MyThread : public ofThread {
-	public:
-		shared_ptr<Image>image;
-		shared_ptr<colorData> get();
-		queue<int> tracedata; // list of indexes that are valid
-		bool isDone() { return done; }
-		void setDone(bool b = true) { done = b; }
-	private:
-		bool done = false;
-		void threadedFunction();
-	};
 	int index = 0;
 	int hits = 0;
 	float threshold;
@@ -67,7 +76,7 @@ public:
 	ofImage img;//both images stored for Convenience  of the progammer
 	cv::Mat mat;
 	ofParameter<ofColor>warm;
-	ofParameter<int> shrinkby = 3; // 5 shaves off some brightness?, 3 is pretty good but slow. 2 is slow and no much better to look at, 4 is ok, not too fast
+	ofParameter<int> shrinkby = 5; // 5 shaves off some brightness?, 3 is pretty good but slow. 2 is slow and no much better to look at, 4 is ok, not too fast
 	string logDir="logs\\";
 	bool readIn = false;
 	MyThread mythread;
@@ -98,8 +107,8 @@ public:
 	void haveBeenNotifiedBool(bool &b);
 	void haveBeenNotifiedDouble(double &d);
 	void redoButtonPressed();
-	bool toscreen(shared_ptr<colorData>data);
-	bool toscreen(colorData& data);
+	bool toscreen(shared_ptr<drawingData>data);
+	bool toscreen(drawingData& data);
 	// read from xml file, 'r' key will refresh data? 
 
 	ofParameter<float> minRadius;

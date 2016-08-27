@@ -376,18 +376,20 @@ int LiveArt::getImages() {
 
 	return images.size();
 }
-shared_ptr<colorData> Image::MyThread::get() {
-	shared_ptr<colorData> data = nullptr;
+shared_ptr<drawingData> MyThread::get() {
+	shared_ptr<drawingData> data = nullptr;
 	lock();
 	if (!tracedata.empty()) {
-		int i = tracedata.front();
-		data = image->drawingData[i];
+		data = tracedata.front();
 		tracedata.pop();
 	}
 	unlock();
 	return data;
 }
-bool myContourFinder::findContours(Mat img) {
+bool myContourFinder::findContours(Mat img, shared_ptr<drawingData>data) {
+	if (!data) {
+		return false;
+	}
 	// threshold the image using a tracked color or just binary grayscale
 	if (useTargetColor) {
 		Scalar offset(thresholdValue, thresholdValue, thresholdValue);
@@ -418,12 +420,13 @@ bool myContourFinder::findContours(Mat img) {
 	}
 	if (polylines.size() > 0) {
 		ofTessellator tess;
-		tess.tessellateToMesh(polylines, OF_POLY_WINDING_ODD, mesh, true);
+		tess.tessellateToMesh(polylines, OF_POLY_WINDING_ODD, data->mesh, true);
+		data->targetColor = targetColor;
 	}
 	return polylines.size() > 0;
 
 }
-void Image::MyThread::threadedFunction() {
+void MyThread::threadedFunction() {
 
 	if (image) {
 		setDone(false);
@@ -436,9 +439,13 @@ void Image::MyThread::threadedFunction() {
 		// less colors, do not draw on top of each other, find holes
 		for (int i = 0; i <  image->drawingData.size(); ++i) {
 			// put all results in a vector of PolyLines, then sort by size, then draw, save polylines in a file
-			if (image->drawingData[i]->findContours(image->mat)) {
+			shared_ptr<drawingData> data = make_shared<drawingData>();
+			if (data != nullptr && image->drawingData[i]->findContours(image->mat, data)) {
 				lock();
-				tracedata.push(i);
+				if (data) {
+					data->mesh;
+					tracedata.push(data);
+				}
 				unlock();
 				++image->hits;
 			}
@@ -511,7 +518,7 @@ void LiveArt::update() {
 	allColors = images[currentImage]->allcolors;
 }
 // true if draw occured
-bool LiveArt::toscreen(colorData& data) {
+bool LiveArt::toscreen(drawingData& data) {
 	ofSetBackgroundColor(images[currentImage]->warm);
 	setTargetColor(data.getTargetColor());
 	ofSetColor(data.getTargetColor());
@@ -519,7 +526,7 @@ bool LiveArt::toscreen(colorData& data) {
 	return true;
 }
 // true if draw occured
-bool LiveArt::toscreen(shared_ptr<colorData> data) {
+bool LiveArt::toscreen(shared_ptr<drawingData> data) {
 	if (data) {
 		return toscreen(*data);
 	}
@@ -531,40 +538,12 @@ void LiveArt::draw() {
 	images[currentImage]->img.draw(0, 0);
 
 	ofSetLineWidth(1);
+	do {
+		if (!toscreen(images[currentImage]->mythread.get())) {
+			break;
+		}
+	} while (1);
 
-	if (!images[currentImage]->mythread.isDone()) {
-		toscreen(images[currentImage]->mythread.get());
-	}
-	else {
-		// clean out any remaining data
-		do {
-			if (!toscreen(images[currentImage]->mythread.get())) {
-				break;
-			}
-		} while (1);
-	}
-
-	if (images[currentImage]->index < 0) {
-		count = -1;
-		ofPopStyle();
-		return;
-	}
-
-	//ofTranslate(300, 0); keep as a reminder
-
-	// thread is building data so only show current item
-	
-	// show one item at a time
-
-	int i = images[currentImage]->index;// for debug
-	int s = images[currentImage]->drawingData.size();
-	if (images[currentImage]->index >= images[currentImage]->drawingData.size()) {
-		images[currentImage]->index = -1; // stop
-	}
-	else if (images[currentImage]->index < images[currentImage]->drawingData.size()) {
-		toscreen(images[currentImage]->drawingData[images[currentImage]->index]);
-		++images[currentImage]->index;
-	}
 	ofPopStyle();
 }
 void LiveArt::echo(ofMesh&mesh) {
