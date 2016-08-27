@@ -230,11 +230,8 @@ void Image::readColors() {
 	allcolors = colorsList.size(); // save size before empty items are removed
 
 	sort(colorsList.begin(), colorsList.end(), [=](shared_ptr<ofColor>  a, shared_ptr<ofColor>  b) {
-		switch (sortby) {
-		case 0:
-			if (a->getSaturation() == b->getSaturation()) {
-				return a->getLightness() < b->getLightness();
-			}
+		if (a->getSaturation() == b->getSaturation()) {
+			return a->getLightness() < b->getLightness();
 		}
 		return a->getSaturation() < b->getSaturation();
 		//bugbug need to add in sort by size, count, saturation, brightness, object size etc
@@ -283,7 +280,7 @@ void LiveArt::setMenu(ofxPanel &gui) {
 	settings.add(sigmaColor.set("sigmaColor", 80, 0.0, 255.0));
 	settings.add(sigmaSpace.set("sigmaSpace", 80, 0.0, 255.0));
 	settings.add(currentImageName.set("currentImageName"));
-	settings.add(sortby.set("sort", 0, 0, 5));
+	settings.add(sortby.set("sort", 3, 0, 5));
 	redo.setup("run");
 	gui.add(&redo);
 	redo.addListener(this, &LiveArt::redoButtonPressed);
@@ -321,6 +318,13 @@ void Image::filter(int id, ofParameter<int> a, ofParameter<double> b, ofParamete
 		}
 		toOf(mat, img);
 		break;
+	case 3:
+		for (int i = 1; i < 5; i = i + 2) {
+			cv::medianBlur(src, mat, i);
+			break;
+		}
+		toOf(mat, img);
+
 	}
 }
 bool LiveArt::loadAndFilter(shared_ptr<Image>image) {
@@ -328,7 +332,7 @@ bool LiveArt::loadAndFilter(shared_ptr<Image>image) {
 	if (image) {
 		if (image->img.load(image->name)) {
 			image->img.resize(xImage, yImage);
-			image->filter(0, d, sigmaColor, sigmaSpace);
+			image->filter(sortby, d, sigmaColor, sigmaSpace);
 		}
 		return true;
 	}

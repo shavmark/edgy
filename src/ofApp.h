@@ -99,7 +99,7 @@ public:
 
 	ofParameter<int> currentImage = 0;
 	vector<shared_ptr<Image>> images;
-	ofParameter<int> sortby=0;
+	ofParameter<int> sortby=2;
 
 
 private:
