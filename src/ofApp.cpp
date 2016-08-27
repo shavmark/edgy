@@ -390,6 +390,8 @@ bool myContourFinder::findContours(Mat img, shared_ptr<drawingData>data) {
 	if (!data) {
 		return false;
 	}
+	cv::Mat thresh;
+
 	// threshold the image using a tracked color or just binary grayscale
 	if (useTargetColor) {
 		Scalar offset(thresholdValue, thresholdValue, thresholdValue);

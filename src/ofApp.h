@@ -30,7 +30,6 @@ public:
 	bool useTargetColor = true;
 	float thresholdValue = 5;
 	ofColor targetColor;
-	cv::Mat thresh;
 	TrackingColorMode trackingColorMode= TRACK_COLOR_RGB;
 	
 };
