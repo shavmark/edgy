@@ -180,7 +180,7 @@ Image::Image(string& filename) {
 
 void Image::readColors() {
 	ofFile resultsfile(logDir);
-	colorsList.clear();
+	
 	if (resultsfile.exists()) {
 		// using a file, hash not needed as all data is just loaded in
 		ofLog() << "use data" << logDir << endl;
@@ -227,8 +227,6 @@ void Image::readColors() {
 		LiveArt::toFile(resultsfile, colorsList, true);
 	}
 
-	allcolors = colorsList.size(); // save size before empty items are removed
-
 	sort(colorsList.begin(), colorsList.end(), [=](shared_ptr<ofColor>  a, shared_ptr<ofColor>  b) {
 		return a->getLightness() < b->getLightness();
 		if (a->getSaturation() == b->getSaturation()) {
@@ -250,23 +248,31 @@ void LiveArt::haveBeenNotifiedDouble(double &d) {
 void LiveArt::redoButtonPressed() {
 
 	ofLog() << " event at redo " << endl;
+
 	// find the current image and start its thread to compile contours
 	for (int i = 0; i < images.size(); ++i) {
 		// if current thread is already running, or the current image is not this one, skip this scan
 		if (images[i]->mythread.isThreadRunning() || images[i]->shortname != currentImageName.get()) {
-			ofLog() << "ignore " << images[i]->name << endl;
+			ofLogNotice() << "ignore " << images[i]->name << endl;
 			continue;
 		}
+
+		images[i]->colorsList.clear();
+
+		images[i]->filter(pictureType);
+		if (!images[i]->getCountours) {
+			ofLogNotice() << "getCountours false " << endl;
+			continue;
+		}
+
 		//images[i]->mythread.finder.setMinAreaRadius(minRadius);
 		//images[i]->mythread.finder.setMaxAreaRadius(maxRadius);
-		images[i]->filter(pictureType);
+		images[i]->smoothAmount = smoothAmount;
 		images[i]->pictureType = pictureType;
 		images[i]->threshold = threshold;
-		if (pictureType != 4) {
-			images[i]->mythread.stop = false;
-			images[i]->mythread.image = images[i];
-			images[i]->mythread.startThread();
-		}
+		images[i]->mythread.stop = false;
+		images[i]->mythread.image = images[i];
+		images[i]->mythread.startThread();
 	}
 
 }
@@ -290,8 +296,10 @@ void LiveArt::setMenu(ofxPanel &gui) {
 
 	settings.add(minRadius.set("minRadius", 1, 0.0, 255.0));
 	settings.add(maxRadius.set("maxRadius", 150, 0.0, 255.0));
+	settings.add(smoothAmount.set("smoothAmount", 5.0, 1.0, 200.0));
+	
 	settings.add(currentImageName.set("currentImageName"));
-	settings.add(pictureType.set("pictureType", 4, 0, 5));
+	settings.add(pictureType.set("pictureType", 0, 0, 10));
 	redo.setup("run");
 	gui.add(&redo);
 	redo.addListener(this, &LiveArt::redoButtonPressed);
@@ -319,32 +327,98 @@ void Image::filter(int id){
 	ofLogNotice("LiveArt::filter") << shortname;
 	
 	// gui.add(radius.set("Radius", 50, 0, 100));
-	//Mat src = toCv(img);
-	//mat = src.clone();
-	//applyColorMap(src, mat, COLORMAP_WINTER);
-	float radius = 10.0; //bugbug put in menu if working
+	Mat src;
+	Mat dst;
+	const double sigmaColor = 100.0;
+	const double sigmaSpace = 10.0;
+	float radius = 5.0; //bugbug put in menu if working
 	ofImage gray;
+	getCountours = true;
+	ofImage test;
 
 	switch (id) {
 	case 0:
-		break; // no sort
+		ofLogNotice("Image::filter") << "no filter";
+		break; // no mod
 	case 1:
-		equalizeHist(img);
+		ofLogNotice("Image::filter") << "equalizeHist";
+		//GaussianBlur(img, 3);
+		ofxCv::equalizeHist(img);
+		test = img;
+		test.resize(100, 100);
+		for (int w = 0; w < test.getWidth(); w += 2) {
+			for (int h = 0; h < test.getHeight(); h += 2) {
+				shared_ptr<ofColor> color = make_shared<ofColor>();
+				if (color == nullptr) {
+					return; // we are in a bad place
+				}
+				*color = test.getPixels().getColor(w, h);
+				// bugbug ? save all colors in a file so its easier to tweak data later? maybe a different file?
+
+				if (warm.get().getBrightness() < color->getBrightness()) {
+					warm = *color;// go with most recent
+				}
+				if (dedupe(*color, shrinkby, shrinkby, shrinkby)) {
+					colorsList.push_back(color);
+				}
+			}
+		}
 		break;
 	case 2:
-		ofxCv::GaussianBlur(img, radius);
+		ofLogNotice("Image::filter") << "GaussianBlur " << smoothAmount;
+		ofxCv::GaussianBlur(img, (int)smoothAmount);
 		break;
 	case 3:
-		ofxCv::blur(img, radius);
+		ofLogNotice("Image::filter") << "blur " << smoothAmount;
+		ofxCv::blur(img, (int)smoothAmount);
 		break;
 	case 4:
-		Canny(img, gray, 50, 150, 3);
+		ofLogNotice("Image::filter") << "Canny " << smoothAmount;
+		ofxCv::convertColor(img, gray, CV_RGB2GRAY);
+		ofxCv::Canny(img, gray, (int)smoothAmount*10, (int)smoothAmount * 40, 3);
+		getCountours = false;
 		break;
 	case 5:
-		//const double sigmaColor = 100.0;
-		//const double sigmaSpace = 10.0;
-		//bilateralFilter(src, dst, 9, sigmaColor, sigmaSpace);
-		//toOf(dst, img);
+		ofLogNotice("Image::filter") << "bilateralFilter ";
+		src = toCv(img).clone();
+		cv::bilateralFilter(src, dst, 9, sigmaColor, sigmaSpace);
+		ofxCv::copy(dst, img);
+		break;
+	case 6:
+		ofLogNotice("Image::filter") << "applyColorMap ";
+		src = toCv(img).clone();
+		cv::applyColorMap(src, dst, COLORMAP_OCEAN);
+		ofxCv::copy(dst, img);
+		getCountours = false;
+		break;
+	case 7:
+		ofLogNotice("Image::filter") << "Sobel ";
+		ofxCv::GaussianBlur(img, 3);
+		ofxCv::convertColor(img, gray, CV_RGB2GRAY);
+		ofxCv::Sobel(gray, img);
+		src = toCv(gray).clone();
+		cv::applyColorMap(src, dst, COLORMAP_OCEAN);
+		ofxCv::copy(dst, img);
+		getCountours = false;
+		break;
+	case 8:
+		ofLogNotice("Image::filter") << "erode " << smoothAmount;
+		ofxCv::GaussianBlur(img, 3);
+		ofxCv::erode(img, (int)smoothAmount);
+		break;
+	case 9:
+		ofLogNotice("Image::filter") << "dilate " << smoothAmount;
+		ofxCv::GaussianBlur(img, 3);
+		ofxCv::dilate(img, (int)smoothAmount);
+		break;
+	case 10:
+		ofLogNotice("Image::filter") << "Laplacian " << smoothAmount;
+		ofxCv::GaussianBlur(img, 3);
+		src = toCv(img).clone();
+		cv::Laplacian(src, dst, (int)smoothAmount);
+		ofxCv::copy(dst, img);
+		getCountours = false;
+		break;
 	}
 }
 int LiveArt::getImages() {
@@ -392,6 +466,7 @@ Contours::Contours(const ofColor &color, float threshold) : ContourFinder() {
 }
 void Contours::draw(float x, float y) {
 	ofTranslate(x, 0);
+	//ofEnableBlendMode(OF_BLENDMODE_SUBTRACT);
 	ofSetColor(targetColor);
 	for (int i = 0; i < getPolylines().size(); ++i) {
 		ofPolyline line = getPolyline(i);
@@ -400,6 +475,7 @@ void Contours::draw(float x, float y) {
 		line.draw();
 		mesh.draw();
 	} 
+	//ofDisableBlendMode();
 }
 
 void MyThread::threadedFunction() {
@@ -416,6 +492,7 @@ void MyThread::threadedFunction() {
 			// put all results in a vector of PolyLines, then sort by size, then draw, save polylines in a file
 			shared_ptr<Contours> contours = make_shared<Contours>(*image->colorsList[i], image->threshold);
 			if (contours != nullptr) {
+				contours->setUseTargetColor(image->img.getImageType() != OF_IMAGE_GRAYSCALE);
 				contours->findContours(image->img);
 				if (contours->getPolylines().size() > 0) {
 					lock();
@@ -477,7 +554,8 @@ void LiveArt::update() {
 		count = images[currentImage]->colorsList.size();
 	}
 	currentImageName = images[currentImage]->shortname;
-	allColors = images[currentImage]->allcolors;
+	allColors = images[currentImage]->colorsList.size();
+	images[currentImage]->img.update();
 }
 void LiveArt::draw() {
 
@@ -515,8 +593,6 @@ void LiveArt::advanceImage()
 void ofApp::setup() {
 	art.setMenu(gui);
 
-	//cam.setup(640, 480);
-
 	ofSetFrameRate(120);
 	
 	art.setup();
@@ -528,29 +604,10 @@ void ofApp::setup() {
 void ofApp::update() {
 	cam.update();
 	art.update();
-
-	//convertColor(cam, gray, CV_RGB2GRAY);
-	//GaussianBlur(gray, gray, gray.getWidth());
-	// Canny(gray, edge, mouseX, mouseY, 3);
-	//Sobel(gray, sobel);
-
-	// gray.update();
-	// sobel.update();
-	//edge.update();
-
-
-
 }
 void ofApp::draw() {
 	gui.draw();
 	art.draw();
-
-	//ofFill();
-	//cam.draw(0, 0);
-	//gray.draw(0, 480);(
-	//edge.draw(640, 0);
-	//sobel.draw(640, 480);
-
 }
 void ofApp::keyPressed(int key) {
 	if (key == ' ') {

@@ -45,18 +45,18 @@ public:
 	string shortname;
 	vector<shared_ptr<ofColor>> colorsList;
 	vector<shared_ptr<ofColor>> ignoredData;
-	int lineThreshHold = 0;
 	ofImage img;//both images stored for Convenience  of the progammer
+	ofImage originalImg;
 	ofParameter<ofColor>warm;
 	ofParameter<int> shrinkby = 5; // 5 shaves off some brightness?, 3 is pretty good but slow. 2 is slow and no much better to look at, 4 is ok, not too fast
 	string logDir="logs\\";
 	bool readIn = false;
 	MyThread mythread;
 	ofParameter<int>pictureType;
-	int allcolors = 0;
 	ofParameter<int> xImage = 500;// make bigger when presenting, smaller when getting colors
 	ofParameter<int> yImage = 500;
-
+	float smoothAmount = 5.0;
+	bool getCountours = true;
 private:
 	static void rgb2ryb(unsigned char &r, unsigned char g, unsigned char &b, unsigned char&y);
 	std::unordered_set<int>  shapes; // hash for quick lookup
@@ -89,6 +89,7 @@ public:
 	ofParameter<int> yImage = 500;
 	ofParameter<string>currentImageName;
 	ofParameter<float> threshold;
+	ofParameter<float> smoothAmount;
 	ofParameter<int> count;
 	ofParameter<ofColor>targetColor;
 	ofxButton redo;
