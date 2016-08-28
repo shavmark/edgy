@@ -240,21 +240,35 @@ void Image::readColors() {
 
 }
 void LiveArt::haveBeenNotifiedFloat(float &f) {
-	images[currentImage]->readIn = false;// get more data
 }
 void LiveArt::haveBeenNotifiedInt(int &i) {
-	images[currentImage]->readIn = false;// get more data
 }
 void LiveArt::haveBeenNotifiedBool(bool &b) {
-	ofLog() << " event at " << b << endl;
 }
 void LiveArt::haveBeenNotifiedDouble(double &d) {
-	images[currentImage]->readIn = false;// get more data
 }
 void LiveArt::redoButtonPressed() {
+
 	ofLog() << " event at redo " << endl;
-	readIn = false;
-	setup();
+	// find the current image and start its thread to compile contours
+	for (int i = 0; i < images.size(); ++i) {
+		// if current thread is already running, or the current image is not this one, skip this scan
+		if (images[i]->mythread.isThreadRunning() || images[i]->shortname != currentImageName.get()) {
+			ofLog() << "ignore " << images[i]->name << endl;
+			continue;
+		}
+		//images[i]->mythread.finder.setMinAreaRadius(minRadius);
+		//images[i]->mythread.finder.setMaxAreaRadius(maxRadius);
+		images[i]->filter(pictureType);
+		images[i]->pictureType = pictureType;
+		images[i]->threshold = threshold;
+		if (pictureType != 4) {
+			images[i]->mythread.stop = false;
+			images[i]->mythread.image = images[i];
+			images[i]->mythread.startThread();
+		}
+	}
+
 }
 
 void LiveArt::setMenu(ofxPanel &gui) {
@@ -276,11 +290,8 @@ void LiveArt::setMenu(ofxPanel &gui) {
 
 	settings.add(minRadius.set("minRadius", 1, 0.0, 255.0));
 	settings.add(maxRadius.set("maxRadius", 150, 0.0, 255.0));
-	settings.add(d.set("d", 15, 0.0, 255.0));
-	settings.add(sigmaColor.set("sigmaColor", 80, 0.0, 255.0));
-	settings.add(sigmaSpace.set("sigmaSpace", 80, 0.0, 255.0));
 	settings.add(currentImageName.set("currentImageName"));
-	settings.add(sortby.set("sort", 3, 0, 5));
+	settings.add(pictureType.set("pictureType", 4, 0, 5));
 	redo.setup("run");
 	gui.add(&redo);
 	redo.addListener(this, &LiveArt::redoButtonPressed);
@@ -295,39 +306,45 @@ void LiveArt::setMenu(ofxPanel &gui) {
 	gui.add(ryb);
 
 }
-void Image::filter(int id, ofParameter<int> a, ofParameter<double> b, ofParameter<double> c){
+void Image::filter(int id){
 #define MAX_KERNEL_LENGTH 31
 
 	//http://docs.opencv.org/2.4/doc/tutorials/imgproc/gausian_median_blur_bilateral_filter/gausian_median_blur_bilateral_filter.html
 	//bugbug get the canny ones here too
-
-	img.load(name); // start from scratch each time
+	if (!img.load(name)) {
+		ofLogError() << "cannot read " << name;
+		return;
+	}
 	img.resize(xImage, yImage);
-
-	Mat src = toCv(img);
-	mat = src.clone();
+	ofLogNotice("LiveArt::filter") << shortname;
 	
+	// gui.add(radius.set("Radius", 50, 0, 100));
+	//Mat src = toCv(img);
+	//mat = src.clone();
+	//applyColorMap(src, mat, COLORMAP_WINTER);
+	float radius = 10.0; //bugbug put in menu if working
+	ofImage gray;
+
 	switch (id) {
 	case 0:
 		break; // no sort
 	case 1:
-		for (int i = 0; i < 1; ++i)	{
-			bilateralFilter(src, mat, a.get(), b.get(), c.get());
-		}
-		toOf(mat, img);
+		equalizeHist(img);
 		break;
 	case 2:
-		for (int i = 1; i < MAX_KERNEL_LENGTH; i = i + 2) {
-			GaussianBlur(src, mat, Size(i, i), 0, 0);
-		}
-		toOf(mat, img);
+		ofxCv::GaussianBlur(img, radius);
 		break;
 	case 3:
-		for (int i = 1; i < MAX_KERNEL_LENGTH; i = i + 2) {
-			cv::medianBlur(src, mat, i);
-		}
-		toOf(mat, img);
-
+		ofxCv::blur(img, radius);
+		break;
+	case 4:
+		Canny(img, gray, 50, 150, 3);
+		break;
+	case 5:
+		//const double sigmaColor = 100.0;
+		//const double sigmaSpace = 10.0;
+		//bilateralFilter(src, dst, 9, sigmaColor, sigmaSpace);
+		//toOf(dst, img);
 	}
 }
 int LiveArt::getImages() {
@@ -342,12 +359,13 @@ int LiveArt::getImages() {
 			}
 		}
 		if (!found) {
+			ofLogNotice("LiveArt::getImages") << "add " << itr.getFileName();
 			shared_ptr<Image> image = make_shared<Image>(itr.getFileName());
 			if (image == nullptr) {
 				ofLogError() << itr.getFileName() << " not loaded";
 				continue;
 			}
-			// opened later
+			image->filter(pictureType);
 			images.push_back(image);
 		}
 	}
@@ -398,7 +416,7 @@ void MyThread::threadedFunction() {
 			// put all results in a vector of PolyLines, then sort by size, then draw, save polylines in a file
 			shared_ptr<Contours> contours = make_shared<Contours>(*image->colorsList[i], image->threshold);
 			if (contours != nullptr) {
-				contours->findContours(image->mat);
+				contours->findContours(image->img);
 				if (contours->getPolylines().size() > 0) {
 					lock();
 					tracedata.push(contours);
@@ -444,23 +462,6 @@ void LiveArt::setup() {
 		}
 		readIn = true;
 	}
-	// find the current image and start its thread to compile contours
-	for (int i = 0; i < images.size(); ++i) {
-		// if current thread is already running, or the current image is not this one, skip this scan
-		if (images[i]->mythread.isThreadRunning() || images[i]->shortname != currentImageName.get()) {
-			ofLog() << "ignore " << images[i]->name << endl;
-			continue;
-		}
-		//images[i]->mythread.finder.setMinAreaRadius(minRadius);
-		//images[i]->mythread.finder.setMaxAreaRadius(maxRadius);
-		images[i]->filter(sortby, d, sigmaColor, sigmaSpace);
-		images[i]->sortby = sortby;
-		images[i]->threshold = threshold;
-		images[i]->mythread.stop = false;
-		images[i]->mythread.image = images[i];
-		images[i]->mythread.startThread();
-	}
-
 
 	// bugbug drop light and dark, use "if light then set lightthresh hold" cleans it all up
 	// bugbug support warm, cools?
@@ -482,6 +483,7 @@ void LiveArt::draw() {
 
 	ofPushStyle();
 	ofSetColor(ofColor::white);
+	ofImage i = images[currentImage]->img;
 	images[currentImage]->img.draw(0, 0);
 
 	ofSetLineWidth(1);
@@ -506,8 +508,9 @@ void LiveArt::advanceImage()
 	}
 	
 	currentImageName = images[currentImage]->shortname;
+	readIn = false;
+	setup();
 
-	redoButtonPressed();
 }
 void ofApp::setup() {
 	art.setMenu(gui);

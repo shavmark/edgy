@@ -40,20 +40,19 @@ public:
 	bool dedupe(ofColor color, int rangeR, int rangeG, int rangeB);
 	void readColors();
 	static void rgbToryb(const ofColor& in, ofParameter<ofColor>& red, ofParameter<ofColor>& yellow, ofParameter<ofColor>& blue);
-	void filter(int id, ofParameter<int> a, ofParameter<double> b, ofParameter<double> c);
+	void filter(int id);
 	string name;
 	string shortname;
 	vector<shared_ptr<ofColor>> colorsList;
 	vector<shared_ptr<ofColor>> ignoredData;
 	int lineThreshHold = 0;
 	ofImage img;//both images stored for Convenience  of the progammer
-	cv::Mat mat;
 	ofParameter<ofColor>warm;
 	ofParameter<int> shrinkby = 5; // 5 shaves off some brightness?, 3 is pretty good but slow. 2 is slow and no much better to look at, 4 is ok, not too fast
 	string logDir="logs\\";
 	bool readIn = false;
 	MyThread mythread;
-	ofParameter<int>sortby=0;
+	ofParameter<int>pictureType;
 	int allcolors = 0;
 	ofParameter<int> xImage = 500;// make bigger when presenting, smaller when getting colors
 	ofParameter<int> yImage = 500;
@@ -88,9 +87,6 @@ public:
 	ofParameter<int> allColors;
 	ofParameter<int> xImage=500;// make bigger when presenting, smaller when getting colors
 	ofParameter<int> yImage = 500;
-	ofParameter<int> d; //bugbug learn for bilateralfilter and enable other filters
-	ofParameter<double> sigmaColor; //bugbug learn for bilateralfilter
-	ofParameter<double> sigmaSpace; //bugbug learn for bilateralfilter
 	ofParameter<string>currentImageName;
 	ofParameter<float> threshold;
 	ofParameter<int> count;
@@ -103,7 +99,7 @@ public:
 
 	ofParameter<int> currentImage = 0;
 	vector<shared_ptr<Image>> images;
-	ofParameter<int> sortby=2;
+	ofParameter<int> pictureType;
 
 
 private:
