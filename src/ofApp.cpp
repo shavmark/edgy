@@ -325,7 +325,6 @@ void Image::filter(int id, ofParameter<int> a, ofParameter<double> b, ofParamete
 	case 3:
 		for (int i = 1; i < MAX_KERNEL_LENGTH; i = i + 2) {
 			cv::medianBlur(src, mat, i);
-			break;
 		}
 		toOf(mat, img);
 
