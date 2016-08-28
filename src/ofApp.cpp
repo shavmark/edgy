@@ -230,6 +230,7 @@ void Image::readColors() {
 	allcolors = colorsList.size(); // save size before empty items are removed
 
 	sort(colorsList.begin(), colorsList.end(), [=](shared_ptr<ofColor>  a, shared_ptr<ofColor>  b) {
+		return a->getLightness() < b->getLightness();
 		if (a->getSaturation() == b->getSaturation()) {
 			return a->getLightness() < b->getLightness();
 		}
@@ -253,7 +254,6 @@ void LiveArt::haveBeenNotifiedDouble(double &d) {
 void LiveArt::redoButtonPressed() {
 	ofLog() << " event at redo " << endl;
 	readIn = false;
-	ofBackground(images[currentImage]->warm);
 	setup();
 }
 
@@ -300,6 +300,10 @@ void Image::filter(int id, ofParameter<int> a, ofParameter<double> b, ofParamete
 
 	//http://docs.opencv.org/2.4/doc/tutorials/imgproc/gausian_median_blur_bilateral_filter/gausian_median_blur_bilateral_filter.html
 	//bugbug get the canny ones here too
+
+	img.load(name); // start from scratch each time
+	img.resize(xImage, yImage);
+
 	Mat src = toCv(img);
 	mat = src.clone();
 	
@@ -319,7 +323,7 @@ void Image::filter(int id, ofParameter<int> a, ofParameter<double> b, ofParamete
 		toOf(mat, img);
 		break;
 	case 3:
-		for (int i = 1; i < 5; i = i + 2) {
+		for (int i = 1; i < MAX_KERNEL_LENGTH; i = i + 2) {
 			cv::medianBlur(src, mat, i);
 			break;
 		}
@@ -327,33 +331,29 @@ void Image::filter(int id, ofParameter<int> a, ofParameter<double> b, ofParamete
 
 	}
 }
-bool LiveArt::loadAndFilter(shared_ptr<Image>image) {
-	
-	if (image) {
-		if (image->img.load(image->name)) {
-			image->img.resize(xImage, yImage);
-			image->filter(sortby, d, sigmaColor, sigmaSpace);
-		}
-		return true;
-	}
-	ofLogError() << image->name << " not loaded";
-	return false;
-}
 int LiveArt::getImages() {
 	ofDirectory dir("images");
 	dir.listDir();
-	images.clear();
-	for (auto& itr = dir.begin(); itr != dir.end(); ++itr) {
-		shared_ptr<Image> image = make_shared<Image>(itr->getFileName());
-		if (image == nullptr || !loadAndFilter(image)) {
-			ofLogError() << itr->getFileName() << " not loaded";
-			continue;
-		} 
-		images.push_back(image);
+	for (auto& itr : dir) {
+		bool found = false;
+		for (auto& itr2 : images) {
+			if (itr.getFileName() == itr2->shortname) {
+				found = true;
+				break;
+			}
+		}
+		if (!found) {
+			shared_ptr<Image> image = make_shared<Image>(itr.getFileName());
+			if (image == nullptr) {
+				ofLogError() << itr.getFileName() << " not loaded";
+				continue;
+			}
+			// opened later
+			images.push_back(image);
+		}
 	}
-	if (images.size() > 0) {
-		currentImageName = images[0]->shortname;
-	}
+
+	currentImageName = images[currentImage]->shortname;
 
 	return images.size();
 }
@@ -395,7 +395,7 @@ void MyThread::threadedFunction() {
 		image->hits = 0;
 		//   contourFinder.setMinAreaNorm(ofMap(mouseY, 0, ofGetHeight(), 0.0, 1.0));
 		// less colors, do not draw on top of each other, find holes
-		for (int i = 0; i <  image->colorsList.size(); ++i) {
+		for (int i = 0; !stop && i < image->colorsList.size(); ++i) {
 			// put all results in a vector of PolyLines, then sort by size, then draw, save polylines in a file
 			shared_ptr<Contours> contours = make_shared<Contours>(*image->colorsList[i], image->threshold);
 			if (contours != nullptr) {
@@ -430,6 +430,11 @@ void MyThread::threadedFunction() {
 		}
 	}
 }
+void MyThread::shutItDown() {
+	stop = true;
+	std::queue<shared_ptr<Contours>> empty;
+	std::swap(tracedata, empty);
+}
 void LiveArt::setup() {
 	ofLog() << "setup" << endl;
 
@@ -449,8 +454,10 @@ void LiveArt::setup() {
 		}
 		//images[i]->mythread.finder.setMinAreaRadius(minRadius);
 		//images[i]->mythread.finder.setMaxAreaRadius(maxRadius);
+		images[i]->filter(sortby, d, sigmaColor, sigmaSpace);
 		images[i]->sortby = sortby;
 		images[i]->threshold = threshold;
+		images[i]->mythread.stop = false;
 		images[i]->mythread.image = images[i];
 		images[i]->mythread.startThread();
 	}
@@ -489,17 +496,24 @@ void LiveArt::draw() {
 }
 void LiveArt::advanceImage()
 {
+	if (images.size() <= 1)
+		return;// ignore
+
+	images[currentImage]->mythread.shutItDown();
+
 	currentImage++;
 	if (currentImage >= images.size()) {
 		currentImage = 0;
 	}
+	
 	currentImageName = images[currentImage]->shortname;
+
 	redoButtonPressed();
 }
 void ofApp::setup() {
 	art.setMenu(gui);
 
-	cam.setup(640, 480);
+	//cam.setup(640, 480);
 
 	ofSetFrameRate(120);
 	

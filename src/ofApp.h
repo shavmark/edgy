@@ -25,6 +25,8 @@ public:
 	shared_ptr<Image>image;
 	shared_ptr<Contours> get();
 	queue<shared_ptr<Contours>> tracedata;
+	void shutItDown();
+	bool stop = false;
 private:
 	void threadedFunction();
 };
@@ -53,6 +55,9 @@ public:
 	MyThread mythread;
 	ofParameter<int>sortby=0;
 	int allcolors = 0;
+	ofParameter<int> xImage = 500;// make bigger when presenting, smaller when getting colors
+	ofParameter<int> yImage = 500;
+
 private:
 	static void rgb2ryb(unsigned char &r, unsigned char g, unsigned char &b, unsigned char&y);
 	std::unordered_set<int>  shapes; // hash for quick lookup
@@ -66,7 +71,6 @@ public:
 	void update();
 	void draw();
 
-	bool LiveArt::loadAndFilter(shared_ptr<Image> image);
 	void setMenu(ofxPanel &gui);
 	void setTargetColor(const ofColor&c);
 	static void toFile(ofFile& resultsfile, vector<shared_ptr<ofColor> > &dat, bool clear);
