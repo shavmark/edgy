@@ -15,6 +15,7 @@ public:
 	Contours(const ofColor &color, float threshold);
 	void draw(float x, float y);
 	ofMesh mesh;
+	ofColor getTargetColor() { return targetColor; }
 private:
 };
 
@@ -45,8 +46,7 @@ public:
 	string shortname;
 	vector<shared_ptr<ofColor>> colorsList;
 	vector<shared_ptr<ofColor>> ignoredData;
-	ofImage img;//both images stored for Convenience  of the progammer
-	ofImage originalImg;
+	ofImage img;
 	ofParameter<ofColor>warm;
 	ofParameter<int> shrinkby = 5; // 5 shaves off some brightness?, 3 is pretty good but slow. 2 is slow and no much better to look at, 4 is ok, not too fast
 	string logDir="logs\\";

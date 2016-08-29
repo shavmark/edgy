@@ -180,7 +180,8 @@ Image::Image(string& filename) {
 
 void Image::readColors() {
 	ofFile resultsfile(logDir);
-	
+	colorsList.clear();
+
 	if (resultsfile.exists()) {
 		// using a file, hash not needed as all data is just loaded in
 		ofLog() << "use data" << logDir << endl;
@@ -257,7 +258,9 @@ void LiveArt::redoButtonPressed() {
 			continue;
 		}
 
-		images[i]->colorsList.clear();
+		images[i]->smoothAmount = smoothAmount;
+		images[i]->pictureType = pictureType;
+		images[i]->threshold = threshold;
 
 		images[i]->filter(pictureType);
 		if (!images[i]->getCountours) {
@@ -267,9 +270,6 @@ void LiveArt::redoButtonPressed() {
 
 		//images[i]->mythread.finder.setMinAreaRadius(minRadius);
 		//images[i]->mythread.finder.setMaxAreaRadius(maxRadius);
-		images[i]->smoothAmount = smoothAmount;
-		images[i]->pictureType = pictureType;
-		images[i]->threshold = threshold;
 		images[i]->mythread.stop = false;
 		images[i]->mythread.image = images[i];
 		images[i]->mythread.startThread();
@@ -300,7 +300,7 @@ void LiveArt::setMenu(ofxPanel &gui) {
 	
 	settings.add(currentImageName.set("currentImageName"));
 	settings.add(pictureType.set("pictureType", 0, 0, 10));
-	redo.setup("run");
+	redo.setup("draw");
 	gui.add(&redo);
 	redo.addListener(this, &LiveArt::redoButtonPressed);
 
@@ -329,40 +329,21 @@ void Image::filter(int id){
 	// gui.add(radius.set("Radius", 50, 0, 100));
 	Mat src;
 	Mat dst;
-	const double sigmaColor = 100.0;
-	const double sigmaSpace = 10.0;
-	float radius = 5.0; //bugbug put in menu if working
 	ofImage gray;
 	getCountours = true;
-	ofImage test;
 
 	switch (id) {
 	case 0:
 		ofLogNotice("Image::filter") << "no filter";
 		break; // no mod
 	case 1:
-		ofLogNotice("Image::filter") << "equalizeHist";
+		ofLogNotice("Image::filter") << "dilate and erode " << smoothAmount;
+		ofxCv::GaussianBlur(img, 3);
+		ofxCv::dilate(img, (int)smoothAmount);
+		ofxCv::erode(img, (int)smoothAmount);
+		//ofLogNotice("Image::filter") << "equalizeHist";
 		//GaussianBlur(img, 3);
-		ofxCv::equalizeHist(img);
-		test = img;
-		test.resize(100, 100);
-		for (int w = 0; w < test.getWidth(); w += 2) {
-			for (int h = 0; h < test.getHeight(); h += 2) {
-				shared_ptr<ofColor> color = make_shared<ofColor>();
-				if (color == nullptr) {
-					return; // we are in a bad place
-				}
-				*color = test.getPixels().getColor(w, h);
-				// bugbug ? save all colors in a file so its easier to tweak data later? maybe a different file?
-
-				if (warm.get().getBrightness() < color->getBrightness()) {
-					warm = *color;// go with most recent
-				}
-				if (dedupe(*color, shrinkby, shrinkby, shrinkby)) {
-					colorsList.push_back(color);
-				}
-			}
-		}
+		//this changes color, to colors we may not have ofxCv::equalizeHist(img);
 		break;
 	case 2:
 		ofLogNotice("Image::filter") << "GaussianBlur " << smoothAmount;
@@ -381,7 +362,7 @@ void Image::filter(int id){
 	case 5:
 		ofLogNotice("Image::filter") << "bilateralFilter ";
 		src = toCv(img).clone();
-		cv::bilateralFilter(src, dst, 9, sigmaColor, sigmaSpace);
+		cv::bilateralFilter(src, dst, (int)smoothAmount, smoothAmount*10, smoothAmount*2);
 		ofxCv::copy(dst, img);
 		break;
 	case 6:
@@ -567,6 +548,7 @@ void LiveArt::draw() {
 	ofSetLineWidth(1);
 	shared_ptr<Contours> p;
 	if (p = images[currentImage]->mythread.get()) {
+		setTargetColor(p->getTargetColor());
 		ofSetBackgroundColor(images[currentImage]->warm);
 		p->draw(xImage, 0);
 	}
