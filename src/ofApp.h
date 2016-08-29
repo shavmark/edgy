@@ -13,7 +13,7 @@ using namespace cv;
 class Contours : public ContourFinder {
 public:
 	Contours(const ofColor &color, float threshold);
-	void draw(float x, float y);
+	void draw(float x, float y, bool fill = true);
 	ofMesh mesh;
 	ofColor getTargetColor() { return targetColor; }
 private:

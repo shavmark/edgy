@@ -299,7 +299,7 @@ void LiveArt::setMenu(ofxPanel &gui) {
 	settings.add(smoothAmount.set("smoothAmount", 5.0, 1.0, 200.0));
 	
 	settings.add(currentImageName.set("currentImageName"));
-	settings.add(pictureType.set("pictureType", 0, 0, 10));
+	settings.add(pictureType.set("pictureType", 0, 0, 11));
 	redo.setup("draw");
 	gui.add(&redo);
 	redo.addListener(this, &LiveArt::redoButtonPressed);
@@ -334,6 +334,7 @@ void Image::filter(int id){
 
 	switch (id) {
 	case 0:
+	case 11:
 		ofLogNotice("Image::filter") << "no filter";
 		break; // no mod
 	case 1:
@@ -445,16 +446,18 @@ Contours::Contours(const ofColor &color, float threshold) : ContourFinder() {
 	setAutoThreshold(false); 
 	setFindHoles(true);
 }
-void Contours::draw(float x, float y) {
+void Contours::draw(float x, float y, bool fill) {
 	ofTranslate(x, 0);
 	//ofEnableBlendMode(OF_BLENDMODE_SUBTRACT);
 	ofSetColor(targetColor);
 	for (int i = 0; i < getPolylines().size(); ++i) {
 		ofPolyline line = getPolyline(i);
-		ofTessellator tess;
-		tess.tessellateToMesh(line, OF_POLY_WINDING_ODD, mesh, true);
 		line.draw();
-		mesh.draw();
+		if (fill) {
+			ofTessellator tess;
+			tess.tessellateToMesh(line, OF_POLY_WINDING_ODD, mesh, true);
+			mesh.draw();
+		}
 	} 
 	//ofDisableBlendMode();
 }
@@ -550,7 +553,7 @@ void LiveArt::draw() {
 	if (p = images[currentImage]->mythread.get()) {
 		setTargetColor(p->getTargetColor());
 		ofSetBackgroundColor(images[currentImage]->warm);
-		p->draw(xImage, 0);
+		p->draw(xImage, 0, pictureType!=11);
 	}
 
 	ofPopStyle();
@@ -604,10 +607,9 @@ void ofApp::keyPressed(int key) {
 	else if (key == 'x') {
 		string name = "save\\";
 		name += ofToString("save.")+art.images[art.currentImage]->shortname;
-		name += ".png";
 		ofImage img;
 		img.grabScreen(art.xImage, 0, art.xImage, art.yImage);
-		img.save(name);
+		img.saveImage(name, OF_IMAGE_QUALITY_BEST);
 	}
 }
 void ofApp::mousePressed(int x, int y, int button) {
