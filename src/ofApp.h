@@ -1,4 +1,6 @@
 #pragma once
+#include <sapi.h>
+#include <sphelper.h>
 
 #include "ofMain.h"
 #include "ofxCv.h"
@@ -18,7 +20,12 @@ public:
 	ofColor getTargetColor() { return targetColor; }
 private:
 };
-
+class ListenThread : public ofThread {
+public:
+private:
+	void threadedFunction();
+	HRESULT checkResult(const HRESULT& result);
+};
 
 class Image;
 class MyThread : public ofThread {
@@ -119,6 +126,7 @@ public:
 	ofImage gray, edge, sobel;
 	ofxPanel gui;
 	LiveArt art;
+	ListenThread thread;
 
 private:
 
